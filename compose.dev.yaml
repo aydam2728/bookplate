@@ -21,7 +21,13 @@ services:
     environment:
       BOOKPLATE_ADDR: ":8080"
       BOOKPLATE_DATA_DIR: "/data"
-      BOOKPLATE_LOG_LEVEL: "debug"
+      BOOKPLATE_LOG_LEVEL: "${BOOKPLATE_LOG_LEVEL:-debug}"
+
+      # Optional, taken from .env when it is there. Empty leaves the
+      # feature off. ADDR and DATA_DIR are deliberately NOT taken from
+      # .env: they have to match the port mapping and the volume below.
+      BOOKPLATE_GOOGLE_BOOKS_KEY: "${BOOKPLATE_GOOGLE_BOOKS_KEY:-}"
+      BOOKPLATE_CONTACT: "${BOOKPLATE_CONTACT:-}"
 
     volumes:
       - bookplate-dev-data:/data
