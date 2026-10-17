@@ -80,12 +80,14 @@ func serve() error {
 
 	accounts := auth.NewHandlers(auth.NewStore(db), logger)
 
-	// Two fetchers with one host each, rather than one with both. The
-	// catalogue has no business reaching the image host, and the image
-	// fetcher has none reaching the catalogue.
+	// One fetcher per purpose, each allowed only the hosts it needs. A
+	// catalogue lookup has no business reaching an image host, and neither
+	// has any business reaching the other catalogue.
 	agent := userAgent(cfg.Contact)
 	catalogueFetcher := metadata.NewFetcher([]string{metadata.OpenLibraryHost}, agent)
-	imageFetcher := metadata.NewFetcher([]string{covers.CoversHost}, agent)
+	imageFetcher := metadata.NewFetcher(
+		[]string{covers.CoversHost, metadata.GoogleThumbnailHost}, agent)
+	googleFetcher := metadata.NewFetcher([]string{metadata.GoogleBooksHost}, agent)
 
 	coverStore := covers.NewStore(db, cfg.DataDir)
 	coverService := covers.NewService(imageFetcher, coverStore, logger)
@@ -95,9 +97,14 @@ func serve() error {
 
 	// Open Library is the only provider enabled without an operator opting
 	// in: its data is in the public domain and it needs no key.
-	lookups := metadata.NewHandlers(
-		metadata.Chain{metadata.NewOpenLibrary(catalogueFetcher)},
-		catalog.NormaliseISBN, logger)
+	providers := metadata.Chain{metadata.NewOpenLibrary(catalogueFetcher)}
+	// Google knows a good deal of recent publishing that Open Library does
+	// not, but only with the operator's own key. Without one it stays off.
+	if google := metadata.NewGoogleBooks(googleFetcher, cfg.GoogleBooksKey); google != nil {
+		providers = append(providers, google)
+		logger.Info("google books enabled")
+	}
+	lookups := metadata.NewHandlers(providers, catalog.NormaliseISBN, logger)
 
 	srv := httpserver.New(cfg.Addr, logger,
 		func(ctx context.Context) error { return database.Ready(ctx, db) },

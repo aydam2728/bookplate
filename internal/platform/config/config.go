@@ -36,6 +36,10 @@ type Config struct {
 	// themselves, and an operator who can be warned is one who does not get
 	// blocked outright.
 	Contact string
+	// GoogleBooksKey enables the Google Books provider. Empty leaves it off:
+	// without a key the API answers from a shared anonymous quota that is
+	// routinely exhausted, so asking at all is worse than not asking.
+	GoogleBooksKey string
 }
 
 // Lookup reports the value of an environment key, as os.LookupEnv does. It is
@@ -70,6 +74,9 @@ func Load(lookup Lookup) (Config, error) {
 	}
 	if v := read("CONTACT"); v != "" {
 		cfg.Contact = v
+	}
+	if v := read("GOOGLE_BOOKS_KEY"); v != "" {
+		cfg.GoogleBooksKey = v
 	}
 	if v := read("LOG_LEVEL"); v != "" {
 		level, err := parseLevel(v)
