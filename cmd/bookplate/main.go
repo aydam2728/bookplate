@@ -1,9 +1,8 @@
 // Command bookplate runs the BookPlate server.
 //
-// It resolves the configuration, opens and migrates the database, builds the
-// server and runs it until the process is asked to stop. Everything else
-// lives behind a package, so that it can be tested without starting a
-// process.
+// It resolves the configuration, opens and migrates the database, assembles
+// the routes and runs until the process is asked to stop. Everything else
+// lives behind a package so it can be tested without starting a process.
 //
 // The "healthcheck" subcommand probes a running instance. The container image
 // uses it so that it needs no shell, curl or wget of its own.
@@ -14,13 +13,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/aydam2728/bookplate/internal/auth"
+	"github.com/aydam2728/bookplate/internal/catalog"
 	"github.com/aydam2728/bookplate/internal/platform/config"
 	"github.com/aydam2728/bookplate/internal/platform/database"
 	"github.com/aydam2728/bookplate/internal/platform/httpserver"
+	"github.com/aydam2728/bookplate/internal/web"
 )
 
 func main() {
@@ -69,9 +72,17 @@ func serve() error {
 		return err
 	}
 
-	srv := httpserver.New(cfg.Addr, logger, func(ctx context.Context) error {
-		return database.Ready(ctx, db)
-	})
+	accounts := auth.NewHandlers(auth.NewStore(db), logger)
+	books := catalog.NewHandlers(catalog.NewStore(db), logger)
+
+	srv := httpserver.New(cfg.Addr, logger,
+		func(ctx context.Context) error { return database.Ready(ctx, db) },
+		accounts.Register,
+		func(mux *http.ServeMux) { books.Register(mux, accounts.Protect) },
+		web.Register,
+	)
+	// Security headers wrap everything, including the operational endpoints.
+	srv.Handler = web.Harden(srv.Handler)
 
 	if err := httpserver.Run(ctx, srv, logger); err != nil {
 		return fmt.Errorf("serving: %w", err)

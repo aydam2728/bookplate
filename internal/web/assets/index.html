@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BookPlate</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<main id="app">
+  <h1>BookPlate</h1>
+  <p id="status" class="muted">Loading…</p>
+
+  <section id="setup" hidden>
+    <h2>Set up this instance</h2>
+    <p class="muted">The first account is the administrator. There is no default password.</p>
+    <form id="setup-form">
+      <label>Your name <input name="displayName" required autocomplete="name"></label>
+      <label>Email <input name="email" type="email" required autocomplete="username"></label>
+      <label>Password <input name="password" type="password" required minlength="10"
+        autocomplete="new-password"></label>
+      <label>Library name <input name="libraryName" value="Home" required></label>
+      <button type="submit">Create the account</button>
+    </form>
+  </section>
+
+  <section id="login" hidden>
+    <h2>Sign in</h2>
+    <form id="login-form">
+      <label>Email <input name="email" type="email" required autocomplete="username"></label>
+      <label>Password <input name="password" type="password" required
+        autocomplete="current-password"></label>
+      <button type="submit">Sign in</button>
+    </form>
+  </section>
+
+  <section id="shelf" hidden>
+    <div class="row">
+      <h2>Your shelf <span id="count" class="muted"></span></h2>
+      <button id="signout" type="button" class="link">Sign out</button>
+    </div>
+
+    <form id="add-form">
+      <div class="grid">
+        <label>Title <input name="title" required placeholder="The Hobbit"></label>
+        <label>Author <input name="author" placeholder="J. R. R. Tolkien"></label>
+        <label>ISBN or barcode <input name="isbn" inputmode="numeric"
+          placeholder="978-0-14-032872-1"></label>
+        <label>Publisher <input name="publisher" placeholder="Puffin"></label>
+      </div>
+      <button type="submit">Add the book</button>
+    </form>
+
+    <ul id="books"></ul>
+    <p id="empty" class="muted" hidden>Nothing on the shelf yet.</p>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

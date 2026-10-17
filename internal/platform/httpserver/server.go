@@ -33,10 +33,14 @@ const (
 )
 
 // New builds the server.
-func New(addr string, logger *slog.Logger, ready Readiness) *http.Server {
+func New(addr string, logger *slog.Logger, ready Readiness, register ...func(*http.ServeMux)) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /readyz", handleReadyz(logger, ready))
+
+	for _, add := range register {
+		add(mux)
+	}
 
 	return &http.Server{
 		Addr:              addr,
