@@ -79,3 +79,24 @@ jobs:
             echo "The image is over the 150 MB budget."
             exit 1
           fi
+
+  vulnerabilities:
+    name: Known vulnerabilities
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      # Pinned, like every other tool this repository executes. It also covers
+      # the standard library, which matters most while there are no
+      # dependencies at all.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
