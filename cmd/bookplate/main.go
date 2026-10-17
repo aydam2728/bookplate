@@ -87,7 +87,9 @@ func serve() error {
 	agent := userAgent(cfg.Contact)
 	catalogueFetcher := metadata.NewFetcher([]string{metadata.OpenLibraryHost}, agent)
 	imageFetcher := metadata.NewFetcher(
-		[]string{covers.CoversHost, metadata.GoogleThumbnailHost}, agent)
+		[]string{covers.CoversHost, metadata.GoogleThumbnailHost, metadata.InventaireHost},
+		agent)
+	inventaireFetcher := metadata.NewFetcher([]string{metadata.InventaireHost}, agent)
 	bnfFetcher := metadata.NewFetcher([]string{metadata.BnFHost}, agent)
 	googleFetcher := metadata.NewFetcher([]string{metadata.GoogleBooksHost}, agent)
 
@@ -100,10 +102,12 @@ func serve() error {
 
 	// Open Library is the only provider enabled without an operator opting
 	// in: its data is in the public domain and it needs no key.
-	// Order matters: open data first, then the French legal deposit, then
-	// the one whose terms are most restrictive.
+	// Order matters. Open data first; then Inventaire, which is open too and
+	// carries covers; then the French legal deposit, authoritative but with
+	// no images; and last the one whose terms are most restrictive.
 	providers := metadata.Chain{
 		metadata.NewOpenLibrary(catalogueFetcher),
+		metadata.NewInventaire(inventaireFetcher),
 		metadata.NewBnF(bnfFetcher),
 	}
 	// Google knows a good deal of recent publishing that Open Library does
