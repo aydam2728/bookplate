@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  # pull_request, never pull_request_target: a fork's code must not run with
+  # access to this repository's secrets.
+  pull_request:
+
+# Least privilege by default. A job raises only what it needs, on itself.
+permissions: read-all
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      # The race detector needs cgo and a C toolchain, which the Linux runner
+      # has and a Windows contributor's machine may not. This is the one check
+      # that genuinely belongs in CI rather than in `make check`.
+      - name: Test with the race detector
+        run: go test -race ./...
