@@ -68,6 +68,31 @@ if docker logs "$NAME" 2>&1 | grep -q "a-private-title"; then
 fi
 pass "query strings stay out of the logs"
 
+if ! curl -fsS "http://127.0.0.1:${PORT}/" | grep -q "BookPlate"; then
+  fail "the interface is not served"
+fi
+pass "the interface is served"
+
+headers=$(curl -fsSI "http://127.0.0.1:${PORT}/")
+case "$headers" in
+  *[Cc]ontent-[Ss]ecurity-[Pp]olicy*) pass "a content security policy is set" ;;
+  *) fail "no content security policy on the page" ;;
+esac
+case "$headers" in
+  *unsafe-inline*) fail "the policy allows inline script" ;;
+  *) pass "the policy allows no inline script" ;;
+esac
+
+# The first run must offer setup rather than letting anyone in.
+if ! curl -fsS "http://127.0.0.1:${PORT}/api/session" | grep -q '"needsSetup":true'; then
+  fail "a fresh instance does not ask to be set up"
+fi
+pass "a fresh instance asks to be set up"
+
+code=$(curl -s -o "$(mktemp)" -w '%{http_code}' "http://127.0.0.1:${PORT}/api/books")
+[ "$code" = "401" ] || fail "the shelf answered $code without a session, expected 401"
+pass "the shelf refuses an anonymous request"
+
 docker stop -t 20 "$NAME" >/dev/null
 exit_code=$(docker inspect "$NAME" --format '{{.State.ExitCode}}')
 [ "$exit_code" = "0" ] || fail "exited with $exit_code on SIGTERM, expected 0"

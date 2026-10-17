@@ -4,9 +4,23 @@ Self-hosted catalogue for the **physical** books in your home. Scan a barcode,
 know which shelf the book is on, and let everyone in the household keep their own
 ratings and reading history.
 
-> **Status: pre-alpha, no working software yet.** This repository currently holds
-> the scope, the architecture decisions and the project rules. Application code
-> starts at milestone P1. Nothing here is deployable.
+> **Status: pre-alpha.** The walking skeleton works: create the first account,
+> add books by hand or by ISBN, see them on a shelf. Nothing is published yet,
+> there is no metadata lookup, no places, no ratings and no second user. Do not
+> trust it with a catalogue you care about.
+
+## Try it
+
+With Docker and nothing else:
+
+```
+make dev
+```
+
+Then open <http://localhost:8080> and create the first account. There is no
+default password: the first run creates the administrator.
+
+`make dev-down` stops it and drops the volume.
 
 ## What it does
 
