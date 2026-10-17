@@ -63,3 +63,8 @@ dev: ## Build from these sources and run the container locally
 .PHONY: dev-down
 dev-down: ## Stop the local container and drop its volume
 	docker compose -f compose.dev.yaml down -v
+
+.PHONY: smoke
+smoke: ## Build the image and smoke-test it
+	docker build -t bookplate:smoke --build-arg VERSION=smoke .
+	./scripts/smoke-test.sh bookplate:smoke

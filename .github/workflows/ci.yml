@@ -45,3 +45,37 @@ jobs:
       # that genuinely belongs in CI rather than in `make check`.
       - name: Test with the race detector
         run: go test -race ./...
+
+  image:
+    name: Image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Both architectures are first-class. One failing must not hide the
+      # other's result.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # Each runner builds for its own architecture, so arm64 is built and
+      # exercised natively rather than under emulation.
+      - name: Build
+        run: docker build -t bookplate:smoke --build-arg VERSION=ci .
+
+      - name: Smoke test
+        run: ./scripts/smoke-test.sh bookplate:smoke
+
+      - name: Report the image size
+        run: |
+          bytes=$(docker image inspect bookplate:smoke --format '{{.Size}}')
+          echo "Image size: $((bytes / 1024 / 1024)) MB (budget: 150 MB)"
+          if [ "$bytes" -gt 157286400 ]; then
+            echo "The image is over the 150 MB budget."
+            exit 1
+          fi
