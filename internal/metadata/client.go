@@ -24,6 +24,14 @@ import (
 const (
 	RequestTimeout  = 10 * time.Second
 	MaxResponseSize = 4 << 20 // 4 MiB, enough for a cover image
+
+	// Attempts bounds how many times one fetch is tried. Three covers the
+	// transient failures without keeping a person waiting.
+	Attempts = 3
+
+	// RetryBackoff is multiplied by the attempt number, so the waits are
+	// short and increasing rather than a thundering retry.
+	RetryBackoff = 400 * time.Millisecond
 )
 
 // ErrBlocked reports a request the client refused to make.
@@ -94,32 +102,75 @@ func (f *Fetcher) Get(ctx context.Context, target string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, RequestTimeout)
 	defer cancel()
 
+	// A provider that answers 503 on one call and succeeds on the next is
+	// the normal state of affairs, not an incident: Google Books in
+	// particular fails this way several times an hour. Without a retry a
+	// bulk scan turns routine flakiness into books typed in by hand.
+	return withRetry(ctx, func() ([]byte, bool, error) {
+		return f.attempt(ctx, target, parsed.Host)
+	})
+}
+
+// withRetry runs one fetch until it succeeds, fails finally, or runs out of
+// attempts. It takes a closure rather than doing the request itself so the
+// policy can be tested without a network and without relaxing the dial check
+// that refuses loopback addresses.
+func withRetry(ctx context.Context, once func() ([]byte, bool, error)) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt < Attempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("giving up after %d attempts: %w", attempt, ctx.Err())
+			case <-time.After(RetryBackoff * time.Duration(attempt)):
+			}
+		}
+
+		body, retryable, err := once()
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+		if !retryable {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("after %d attempts: %w", Attempts, lastErr)
+}
+
+// attempt makes one request and says whether failing again is worth trying.
+// A refusal of ours and anything the provider answers in the 4xx range are
+// final: retrying a bad request only wastes someone else's quota.
+func (f *Fetcher) attempt(ctx context.Context, target, host string) ([]byte, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return nil, fmt.Errorf("building the request: %w", err)
+		return nil, false, fmt.Errorf("building the request: %w", err)
 	}
 	req.Header.Set("User-Agent", f.agent)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := f.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching %s: %w", parsed.Host, err)
+		// A refused connection or a reset is worth one more try; a blocked
+		// address is not.
+		return nil, !errors.Is(err, ErrBlocked), fmt.Errorf("fetching %s: %w", host, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching %s: status %d", parsed.Host, resp.StatusCode)
+		retryable := resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests
+		return nil, retryable, fmt.Errorf("fetching %s: status %d", host, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseSize+1))
 	if err != nil {
-		return nil, fmt.Errorf("reading from %s: %w", parsed.Host, err)
+		return nil, true, fmt.Errorf("reading from %s: %w", host, err)
 	}
 	if len(body) > MaxResponseSize {
-		return nil, fmt.Errorf("%w: %s sent more than %d bytes",
-			ErrBlocked, parsed.Host, MaxResponseSize)
+		return nil, false, fmt.Errorf("%w: %s sent more than %d bytes",
+			ErrBlocked, host, MaxResponseSize)
 	}
-	return body, nil
+	return body, false, nil
 }
 
 // blockPrivateAddresses refuses to connect to anything that is not a public
