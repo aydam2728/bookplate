@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  # So the pipeline can be proved end to end before a real tag is cut.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, such as 0.1.0-rc1"
+        required: true
+
+permissions: read-all
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish signed image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      # Sigstore keyless signing: the attestation is bound to this workflow's
+      # identity, so no maintainer holds a signing key on a laptop.
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Resolve the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing $version"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to the registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # One manifest covering both architectures: an operator pulls the same
+      # name everywhere. No QEMU is involved, because the Dockerfile
+      # cross-compiles from the build host.
+      #
+      # --sbom and --provenance make BuildKit attach a software bill of
+      # materials and build provenance to the image itself, so they travel
+      # with it rather than living in a release asset nobody downloads.
+      - name: Build and push
+        id: build
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          image="ghcr.io/${{ github.repository }}"
+          minor="${version%.*}"
+
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg "VERSION=$version" \
+            --sbom=true \
+            --provenance=mode=max \
+            --tag "$image:$version" \
+            --tag "$image:$minor" \
+            --tag "$image:latest" \
+            --metadata-file metadata.json \
+            --push .
+
+          digest=$(grep -o '"containerimage.digest": *"[^"]*"' metadata.json | cut -d'"' -f4)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Published $image:$version at $digest"
+
+      # A signed statement that this exact digest came from this workflow, at
+      # this commit. It is what lets an operator refuse an image that was
+      # swapped in the registry after publication.
+      - name: Attest provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ steps.build.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Summarise
+        run: |
+          {
+            echo "### Published"
+            echo
+            echo '```'
+            echo "docker pull ${{ steps.build.outputs.image }}@${{ steps.build.outputs.digest }}"
+            echo '```'
+            echo
+            echo "Verify before running it:"
+            echo
+            echo '```'
+            echo "gh attestation verify oci://${{ steps.build.outputs.image }}@${{ steps.build.outputs.digest }} \\"
+            echo "  --repo ${{ github.repository }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
