@@ -1,0 +1,44 @@
+# BookPlate, hardened by default.
+#
+# This is the documented way to run it. The hardening below is the normal
+# configuration, not an appendix for experts: an instance of this software is
+# reachable from a bookshop, which means it is reachable from the internet.
+
+services:
+  bookplate:
+    # Pin a minor line such as 0.1 rather than latest. An unattended major
+    # upgrade is how self-hosted instances break overnight.
+    image: ghcr.io/aydam2728/bookplate:0.1
+    restart: unless-stopped
+
+    environment:
+      BOOKPLATE_ADDR: ":8080"
+      BOOKPLATE_DATA_DIR: "/data"
+      BOOKPLATE_LOG_LEVEL: "info"
+
+    # The only directory the server writes to, and so the only one to back up.
+    volumes:
+      - bookplate-data:/data
+
+    # Bound to the loopback on purpose: a reverse proxy in front terminates
+    # TLS. TLS is not optional here, because scanning a barcode with the camera
+    # requires a secure context and will not work over plain HTTP.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+
+    # Matches the nonroot user baked into the image. Keep the two in step if
+    # you change either.
+    user: "65532:65532"
+
+    # The health check is declared by the image and calls the binary itself.
+
+volumes:
+  bookplate-data:
