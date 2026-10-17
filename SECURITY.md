@@ -51,7 +51,9 @@ Before running an image, check that the digest you are about to pull really
 came from this repository:
 
 ```
-gh attestation verify oci://ghcr.io/aydam2728/bookplate:... \n  --repo aydam2728/bookplate
+gh attestation verify \
+  oci://ghcr.io/aydam2728/bookplate@sha256:DIGEST \
+  --repo aydam2728/bookplate
 ```
 
 A software bill of materials is attached to the image itself rather than to a
