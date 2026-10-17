@@ -1,8 +1,8 @@
 # Build output
 /bin/
 /dist/
-bookplate
-bookplate.exe
+/bookplate
+/bookplate.exe
 
 # Runtime data: never commit a catalogue or a cover cache
 /data/
