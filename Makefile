@@ -43,3 +43,15 @@ run: ## Run a local instance
 .PHONY: clean
 clean: ## Remove build output
 	rm -rf bin
+
+IMAGE   ?= ghcr.io/aydam2728/bookplate
+VERSION ?= dev
+
+.PHONY: image
+image: ## Build the container image for this machine architecture
+	docker build -t $(IMAGE):$(VERSION) --build-arg VERSION=$(VERSION) .
+
+.PHONY: image-multiarch
+image-multiarch: ## Build for amd64 and arm64 without publishing
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(VERSION) -t $(IMAGE):$(VERSION) .

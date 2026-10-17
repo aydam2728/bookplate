@@ -1,0 +1,28 @@
+# Keep the build context to what the image actually needs. Anything listed
+# here cannot end up in a layer by accident.
+.git
+.github
+.gitattributes
+.gitignore
+.editorconfig
+
+# Build output and runtime data
+bin/
+dist/
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Documentation and governance: useful in the repository, dead weight in an image
+docs/
+*.md
+LICENSE
+Makefile
+compose.yaml
+Dockerfile
