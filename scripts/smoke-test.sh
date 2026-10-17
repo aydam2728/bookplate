@@ -9,7 +9,7 @@ IMAGE="${1:-bookplate:smoke}"
 NAME="bookplate-smoke-$$"
 PORT="${PORT:-18080}"
 
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
+cleanup() { docker rm -fv "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -24,9 +24,17 @@ if docker run --rm --entrypoint sh "$IMAGE" -c true >/dev/null 2>&1; then
 fi
 pass "no shell in the image"
 
-docker run -d --name "$NAME" \
+# /data has to be a mount. The root filesystem is read-only, and an anonymous
+# volume inherits the ownership the image carries at that path, which is what
+# lets the unprivileged user create the database.
+#
+# MSYS_NO_PATHCONV applies to this one command: Git Bash on Windows would
+# otherwise rewrite "/data" into a Windows path. Setting it for the whole
+# script instead would break curl's "-o /dev/null".
+MSYS_NO_PATHCONV=1 docker run -d --name "$NAME" \
   --read-only --cap-drop ALL --security-opt no-new-privileges \
   --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  -v /data \
   -p "127.0.0.1:${PORT}:8080" "$IMAGE" >/dev/null
 pass "starts read-only, no capabilities, no-new-privileges"
 
@@ -38,10 +46,17 @@ curl -fsS --retry 30 --retry-connrefused --retry-delay 1 \
   "http://127.0.0.1:${PORT}/healthz" >/dev/null || fail "/healthz did not answer"
 pass "/healthz answers"
 
+# /readyz queries the database, so a 200 here proves the schema was created on
+# a fresh volume by an unprivileged user.
 curl -fsS "http://127.0.0.1:${PORT}/readyz" >/dev/null || fail "/readyz did not answer"
-pass "/readyz answers"
+pass "/readyz answers, so the database opened and migrated"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/no-such-route")
+if ! docker logs "$NAME" 2>&1 | grep -q "schema migrated"; then
+  fail "the schema was not migrated on a fresh volume"
+fi
+pass "schema migrated on a fresh volume"
+
+code=$(curl -s -w '%{http_code}' -o "$(mktemp)" "http://127.0.0.1:${PORT}/no-such-route")
 [ "$code" = "404" ] || fail "an unknown route returned $code, expected 404"
 pass "unknown route is 404"
 
