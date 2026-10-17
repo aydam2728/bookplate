@@ -20,11 +20,16 @@ import (
 
 	"github.com/aydam2728/bookplate/internal/auth"
 	"github.com/aydam2728/bookplate/internal/catalog"
+	"github.com/aydam2728/bookplate/internal/metadata"
 	"github.com/aydam2728/bookplate/internal/platform/config"
 	"github.com/aydam2728/bookplate/internal/platform/database"
 	"github.com/aydam2728/bookplate/internal/platform/httpserver"
 	"github.com/aydam2728/bookplate/internal/web"
 )
+
+// version is set at build time with -ldflags. It identifies this instance
+// to the metadata providers.
+var version = "dev"
 
 func main() {
 	if err := dispatch(os.Args[1:]); err != nil {
@@ -75,10 +80,18 @@ func serve() error {
 	accounts := auth.NewHandlers(auth.NewStore(db), logger)
 	books := catalog.NewHandlers(catalog.NewStore(db), logger)
 
+	// Open Library is the only provider enabled without an operator opting
+	// in: its data is in the public domain and it needs no key.
+	fetcher := metadata.NewFetcher([]string{metadata.OpenLibraryHost}, userAgent(cfg.Contact))
+	lookups := metadata.NewHandlers(
+		metadata.Chain{metadata.NewOpenLibrary(fetcher)},
+		catalog.NormaliseISBN, logger)
+
 	srv := httpserver.New(cfg.Addr, logger,
 		func(ctx context.Context) error { return database.Ready(ctx, db) },
 		accounts.Register,
 		func(mux *http.ServeMux) { books.Register(mux, accounts.Protect) },
+		func(mux *http.ServeMux) { lookups.Register(mux, accounts.Protect) },
 		web.Register,
 	)
 	// Security headers wrap everything, including the operational endpoints.
@@ -125,4 +138,15 @@ func healthcheck() error {
 		return fmt.Errorf("configuration:\n%w", err)
 	}
 	return httpserver.Probe(context.Background(), cfg.Addr)
+}
+
+// userAgent identifies this instance to metadata providers. Open Library
+// raises its rate limit for callers who say who they are, and an operator who
+// can be warned is one who does not get blocked outright.
+func userAgent(contact string) string {
+	agent := "BookPlate/" + version + " (+https://github.com/aydam2728/bookplate)"
+	if contact != "" {
+		agent = "BookPlate/" + version + " (" + contact + ")"
+	}
+	return agent
 }

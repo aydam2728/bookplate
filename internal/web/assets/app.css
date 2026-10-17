@@ -51,3 +51,8 @@ li .title { font-weight: 600; }
 li .meta { color: var(--muted); font-size: 13px; }
 #status[data-kind="error"] { color: #b3261e; }
 @media (prefers-color-scheme: dark) { #status[data-kind="error"] { color: #f2b8b5; } }
+.with-button { display: flex; gap: 8px; margin: 4px 0 16px; }
+.with-button input { flex: 1; margin-top: 0; }
+.with-button button { white-space: nowrap; background: none; color: var(--accent);
+  border: 1px solid var(--line); }
+button:disabled { opacity: 0.55; cursor: progress; }

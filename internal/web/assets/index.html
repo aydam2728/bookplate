@@ -44,9 +44,13 @@
       <div class="grid">
         <label>Title <input name="title" required placeholder="The Hobbit"></label>
         <label>Author <input name="author" placeholder="J. R. R. Tolkien"></label>
-        <label>ISBN or barcode <input name="isbn" inputmode="numeric"
-          placeholder="978-0-14-032872-1"></label>
         <label>Publisher <input name="publisher" placeholder="Puffin"></label>
+        <label>Published <input name="published" placeholder="1998"></label>
+      </div>
+      <label for="isbn">ISBN or barcode</label>
+      <div class="with-button">
+        <input id="isbn" name="isbn" inputmode="numeric" placeholder="978-0-14-032872-1">
+        <button id="lookup" type="button">Look it up</button>
       </div>
       <button type="submit">Add the book</button>
     </form>

@@ -31,6 +31,11 @@ type Config struct {
 	DataDir string
 	// LogLevel is the minimum level written to standard output.
 	LogLevel slog.Level
+	// Contact is an address a metadata provider can use to reach the
+	// operator. Providers raise their rate limits for callers who identify
+	// themselves, and an operator who can be warned is one who does not get
+	// blocked outright.
+	Contact string
 }
 
 // Lookup reports the value of an environment key, as os.LookupEnv does. It is
@@ -62,6 +67,9 @@ func Load(lookup Lookup) (Config, error) {
 	}
 	if v := read("DATA_DIR"); v != "" {
 		cfg.DataDir = v
+	}
+	if v := read("CONTACT"); v != "" {
+		cfg.Contact = v
 	}
 	if v := read("LOG_LEVEL"); v != "" {
 		level, err := parseLevel(v)

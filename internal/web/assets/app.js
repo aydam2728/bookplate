@@ -100,7 +100,7 @@ function submits(formId, handler) {
   el(formId).addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.target;
-    const button = form.querySelector("button");
+    const button = form.querySelector("button[type=submit]");
     button.disabled = true;
     try {
       await handler(fields(form), form);
@@ -140,3 +140,36 @@ el("signout").addEventListener("click", async () => {
 });
 
 start();
+
+// Looking an ISBN up fills the form rather than adding the book, so a wrong
+// record is corrected before anything is stored. A failure is never fatal:
+// the fields stay editable and the book goes in by hand.
+el("lookup").addEventListener("click", async () => {
+  const isbnField = el("isbn");
+  const isbn = isbnField.value.trim();
+  if (!isbn) {
+    isbnField.focus();
+    say("Type or scan an ISBN first.");
+    return;
+  }
+
+  const button = el("lookup");
+  button.disabled = true;
+  say("Looking it up…");
+  try {
+    const found = await call("GET", `/api/lookup?isbn=${encodeURIComponent(isbn)}`);
+    const form = el("add-form");
+    const fill = (name, value) => {
+      if (value) form.querySelector(`input[name=${name}]`).value = value;
+    };
+    fill("title", found.subtitle ? `${found.title}: ${found.subtitle}` : found.title);
+    fill("author", (found.authors || []).join(", "));
+    fill("publisher", found.publisher);
+    fill("published", found.published);
+    say(`Found “${found.title}”. Check it, then add it.`);
+  } catch (error) {
+    say(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
