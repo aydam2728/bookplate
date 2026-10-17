@@ -29,6 +29,8 @@ type Book struct {
 	Published string `json:"published"`
 	ISBN13    string `json:"isbn13"`
 	CoverID   string `json:"coverId"`
+	PlaceID   string `json:"placeId"`
+	PlaceName string `json:"placeName"`
 	AddedAt   string `json:"addedAt"`
 }
 
@@ -40,6 +42,7 @@ type AddInput struct {
 	Publisher string `json:"publisher"`
 	Published string `json:"published"`
 	CoverURL  string `json:"coverUrl"`
+	PlaceID   string `json:"placeId"`
 }
 
 // Store reads and writes the catalogue.
@@ -98,9 +101,9 @@ func (s *Store) Add(ctx context.Context, caller scope.Caller, in AddInput) (Book
 		return Book{}, err
 	}
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO copy (id, library_id, edition_id, status, created_at, updated_at)
-		 VALUES (?, ?, ?, 'owned', ?, ?)`,
-		copyID, caller.LibraryID, editionID, now, now)
+		`INSERT INTO copy (id, library_id, edition_id, place_id, status, created_at, updated_at)
+		 VALUES (?, ?, ?, nullif(?, ''), 'owned', ?, ?)`,
+		copyID, caller.LibraryID, editionID, strings.TrimSpace(in.PlaceID), now, now)
 	if err != nil {
 		return Book{}, fmt.Errorf("adding a copy: %w", err)
 	}
@@ -230,12 +233,14 @@ const selectBooks = `
 	SELECT c.id, w.id, e.id, w.title,
 	       coalesce(group_concat(a.name, ', '), ''),
 	       coalesce(e.publisher, ''), coalesce(e.published_date, ''),
-	       coalesce(i.value, ''), c.created_at, coalesce(e.cover_asset_id, '')
+	       coalesce(i.value, ''), c.created_at, coalesce(e.cover_asset_id, ''),
+	       coalesce(c.place_id, ''), coalesce(pl.name, '')
 	  FROM copy c
 	  JOIN edition e ON e.id = c.edition_id AND e.library_id = c.library_id
 	  JOIN work    w ON w.id = e.work_id    AND w.library_id = c.library_id
 	  LEFT JOIN work_author wa ON wa.work_id = w.id AND wa.library_id = c.library_id
 	  LEFT JOIN author      a  ON a.id = wa.author_id AND a.library_id = c.library_id
+	  LEFT JOIN place pl ON pl.id = c.place_id AND pl.library_id = c.library_id
 	  LEFT JOIN edition_identifier i
 	         ON i.edition_id = e.id AND i.library_id = c.library_id AND i.scheme = 'isbn13'
 	 WHERE c.library_id = ? AND c.deleted_at IS NULL`
@@ -258,7 +263,8 @@ func (s *Store) List(ctx context.Context, caller scope.Caller) ([]Book, error) {
 	for rows.Next() {
 		var b Book
 		if err := rows.Scan(&b.CopyID, &b.WorkID, &b.EditionID, &b.Title, &b.Authors,
-			&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID); err != nil {
+			&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID,
+			&b.PlaceID, &b.PlaceName); err != nil {
 			return nil, fmt.Errorf("listing books: %w", err)
 		}
 		books = append(books, b)
@@ -275,7 +281,8 @@ func (s *Store) ByCopyID(ctx context.Context, caller scope.Caller, copyID string
 	err := s.db.QueryRowContext(ctx,
 		selectBooks+` AND c.id = ? GROUP BY c.id`,
 		caller.LibraryID, copyID).Scan(&b.CopyID, &b.WorkID, &b.EditionID, &b.Title, &b.Authors,
-		&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID)
+		&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID,
+		&b.PlaceID, &b.PlaceName)
 	if err != nil {
 		return Book{}, fmt.Errorf("reading back the copy: %w", err)
 	}

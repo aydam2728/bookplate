@@ -40,11 +40,33 @@
       <button id="signout" type="button" class="link">Sign out</button>
     </div>
 
+    <section id="places-panel">
+      <h2>Places <span id="place-count" class="muted"></span></h2>
+      <p class="muted">Where things actually are. No fixed levels: a house, a room,
+        a bookcase, a shelf, a box in the garage.</p>
+      <form id="place-form">
+        <div class="with-button">
+          <input name="name" required placeholder="Shelf 3" aria-label="Place name">
+          <select name="parentId" id="place-parent" aria-label="Inside">
+            <option value="">At the top</option>
+          </select>
+          <button type="submit">Add the place</button>
+        </div>
+      </form>
+      <ul id="places"></ul>
+    </section>
+
+    <h2>Add a book</h2>
     <form id="add-form">
       <div class="grid">
         <label>Title <input name="title" required placeholder="The Hobbit"></label>
         <label>Author <input name="author" placeholder="J. R. R. Tolkien"></label>
         <label>Publisher <input name="publisher" placeholder="Puffin"></label>
+        <label>Where it goes
+          <select name="placeId" id="book-place">
+            <option value="">Not filed yet</option>
+          </select>
+        </label>
         <label>Published <input name="published" placeholder="1998"></label>
       </div>
       <label for="isbn">ISBN or barcode</label>

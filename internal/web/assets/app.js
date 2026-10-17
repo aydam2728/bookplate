@@ -71,7 +71,8 @@ function render(books) {
     title.textContent = book.title;
     text.append(title);
 
-    const bits = [book.authors, book.publisher, book.published, book.isbn13].filter(Boolean);
+    const bits = [book.authors, book.publisher, book.published, book.isbn13,
+      book.placeName && `in ${book.placeName}`].filter(Boolean);
     if (bits.length) {
       const meta = document.createElement("div");
       meta.className = "meta";
@@ -84,7 +85,8 @@ function render(books) {
 }
 
 async function refresh() {
-  render(await call("GET", "/api/books"));
+  const [books] = await Promise.all([call("GET", "/api/books"), refreshPlaces()]);
+  render(books);
 }
 
 async function start() {
@@ -185,4 +187,64 @@ el("lookup").addEventListener("click", async () => {
   } finally {
     button.disabled = false;
   }
+});
+
+// Places: the tree of where things physically are. Indentation carries the
+// hierarchy, and each line shows how many copies sit at or below it.
+function renderPlaces(tree) {
+  const list = el("places");
+  list.replaceChildren();
+  el("place-count").textContent = tree.length ? `· ${tree.length}` : "";
+
+  for (const place of tree) {
+    const item = document.createElement("li");
+    item.className = "place";
+    item.style.paddingLeft = `${14 + place.depth * 20}px`;
+
+    const name = document.createElement("span");
+    name.textContent = place.name;
+    item.append(name);
+
+    const count = document.createElement("span");
+    count.className = "meta";
+    count.textContent = place.copies === 1 ? "1 book" : `${place.copies} books`;
+    item.append(count);
+
+    list.append(item);
+  }
+
+  // Both pickers show the same tree, indented with figure spaces so the
+  // shape survives inside a select, where markup does not.
+  for (const [id, top] of [["place-parent", "At the top"], ["book-place", "Not filed yet"]]) {
+    const select = el(id);
+    const chosen = select.value;
+    select.replaceChildren();
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = top;
+    select.append(none);
+    for (const place of tree) {
+      const option = document.createElement("option");
+      option.value = place.id;
+      option.textContent = `${"  ".repeat(place.depth)}${place.name}`;
+      select.append(option);
+    }
+    select.value = chosen;
+  }
+}
+
+async function refreshPlaces() {
+  renderPlaces(await call("GET", "/api/places"));
+}
+
+submits("place-form", async (values, form) => {
+  await call("POST", "/api/places", { parentId: values.parentId || "", name: values.name });
+  const parent = form.querySelector("select[name=parentId]").value;
+  form.reset();
+  // Keep the parent selected: adding five shelves to one bookcase is the
+  // normal case, and resetting it every time would be a nuisance.
+  form.querySelector("select[name=parentId]").value = parent;
+  form.querySelector("input[name=name]").focus();
+  await refreshPlaces();
+  say("");
 });
