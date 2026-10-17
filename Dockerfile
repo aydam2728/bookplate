@@ -3,7 +3,7 @@
 # Build on the host architecture and cross-compile to the target. Go does this
 # natively, whereas emulating an arm64 toolchain under QEMU is an order of
 # magnitude slower and occasionally miscompiles.
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine AS build
 
 ARG TARGETOS
 ARG TARGETARCH
