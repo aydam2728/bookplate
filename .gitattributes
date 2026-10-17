@@ -1,0 +1,8 @@
+# Normalise line endings in the repository: contributors on Windows must not
+# leak CRLF into the history.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
