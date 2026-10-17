@@ -119,6 +119,42 @@ curl -fsS -b "$jar" "$base/api/books" | grep -q "Fantastic Mr Fox" \
   || fail "the book just added is not on the shelf"
 pass "the shelf shows the book"
 
+# Places: build two levels, file a book on the lower one, and check the count
+# reaches the top. The accented name matters: this catalogue will mostly hold
+# French titles.
+#
+# The bodies go through files. On Git Bash a non-ASCII argument is mangled on
+# its way to the native curl.exe, which is a property of that shell and not of
+# the server, and a test must not fail for it.
+house=$(curl -fsS -b "$jar" -H "$json" -d '{"name":"Maison","kind":"building"}' \
+  "$base/api/places" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+[ -n "$house" ] || fail "creating a place returned no identifier"
+
+body=$(mktemp)
+printf '{"parentId":"%s","name":"\303\211tag\303\250re 3","kind":"shelf"}' "$house" > "$body"
+shelf=$(curl -fsS -b "$jar" -H "$json" --data-binary "@$body" \
+  "$base/api/places" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+[ -n "$shelf" ] || fail "creating a child place returned no identifier"
+pass "a place tree is created"
+
+expected=$(printf '\303\211tag\303\250re 3')
+curl -fsS -b "$jar" "$base/api/places" | grep -q "$expected" \
+  || fail "an accented place name did not survive the round trip"
+pass "accented names survive"
+
+printf '{"title":"A filed book","placeId":"%s"}' "$shelf" > "$body"
+curl -fsS -b "$jar" -H "$json" --data-binary "@$body" -o /dev/null "$base/api/books" \
+  || fail "filing a book into a place failed"
+curl -fsS -b "$jar" "$base/api/books" | grep -q "\"placeName\":\"$expected\"" \
+  || fail "the shelf view does not say where the book is"
+pass "a book knows where it sits"
+
+# The count has to reach every ancestor, not just the shelf it sits on.
+curl -fsS -b "$jar" "$base/api/places" \
+  | grep -q '"name":"Maison".*"depth":0,"copies":1' \
+  || fail "the count did not reach the top of the tree"
+pass "counts reach every ancestor"
+
 # Validation happens before anything leaves the instance, so this needs no
 # network and is safe to assert in CI.
 code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/lookup?isbn=9780140328722")
