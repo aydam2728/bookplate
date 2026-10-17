@@ -56,3 +56,8 @@ li .meta { color: var(--muted); font-size: 13px; }
 .with-button button { white-space: nowrap; background: none; color: var(--accent);
   border: 1px solid var(--line); }
 button:disabled { opacity: 0.55; cursor: progress; }
+li { display: flex; gap: 12px; align-items: flex-start; }
+li .cover {
+  width: 44px; height: 66px; flex: none; object-fit: cover;
+  border-radius: 4px; background: var(--line);
+}

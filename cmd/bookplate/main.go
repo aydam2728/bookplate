@@ -20,6 +20,7 @@ import (
 
 	"github.com/aydam2728/bookplate/internal/auth"
 	"github.com/aydam2728/bookplate/internal/catalog"
+	"github.com/aydam2728/bookplate/internal/covers"
 	"github.com/aydam2728/bookplate/internal/metadata"
 	"github.com/aydam2728/bookplate/internal/platform/config"
 	"github.com/aydam2728/bookplate/internal/platform/database"
@@ -78,13 +79,24 @@ func serve() error {
 	}
 
 	accounts := auth.NewHandlers(auth.NewStore(db), logger)
-	books := catalog.NewHandlers(catalog.NewStore(db), logger)
+
+	// Two fetchers with one host each, rather than one with both. The
+	// catalogue has no business reaching the image host, and the image
+	// fetcher has none reaching the catalogue.
+	agent := userAgent(cfg.Contact)
+	catalogueFetcher := metadata.NewFetcher([]string{metadata.OpenLibraryHost}, agent)
+	imageFetcher := metadata.NewFetcher([]string{covers.CoversHost}, agent)
+
+	coverStore := covers.NewStore(db, cfg.DataDir)
+	coverService := covers.NewService(imageFetcher, coverStore, logger)
+	coverRoutes := covers.NewHandlers(coverStore, logger)
+
+	books := catalog.NewHandlers(catalog.NewStore(db), coverService, logger)
 
 	// Open Library is the only provider enabled without an operator opting
 	// in: its data is in the public domain and it needs no key.
-	fetcher := metadata.NewFetcher([]string{metadata.OpenLibraryHost}, userAgent(cfg.Contact))
 	lookups := metadata.NewHandlers(
-		metadata.Chain{metadata.NewOpenLibrary(fetcher)},
+		metadata.Chain{metadata.NewOpenLibrary(catalogueFetcher)},
 		catalog.NormaliseISBN, logger)
 
 	srv := httpserver.New(cfg.Addr, logger,
@@ -92,6 +104,7 @@ func serve() error {
 		accounts.Register,
 		func(mux *http.ServeMux) { books.Register(mux, accounts.Protect) },
 		func(mux *http.ServeMux) { lookups.Register(mux, accounts.Protect) },
+		func(mux *http.ServeMux) { coverRoutes.Register(mux, accounts.Protect) },
 		web.Register,
 	)
 	// Security headers wrap everything, including the operational endpoints.

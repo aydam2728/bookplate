@@ -22,11 +22,13 @@ var ErrInvalid = errors.New("invalid")
 type Book struct {
 	CopyID    string `json:"copyId"`
 	WorkID    string `json:"workId"`
+	EditionID string `json:"editionId"`
 	Title     string `json:"title"`
 	Authors   string `json:"authors"`
 	Publisher string `json:"publisher"`
 	Published string `json:"published"`
 	ISBN13    string `json:"isbn13"`
+	CoverID   string `json:"coverId"`
 	AddedAt   string `json:"addedAt"`
 }
 
@@ -37,6 +39,7 @@ type AddInput struct {
 	ISBN      string `json:"isbn"`
 	Publisher string `json:"publisher"`
 	Published string `json:"published"`
+	CoverURL  string `json:"coverUrl"`
 }
 
 // Store reads and writes the catalogue.
@@ -105,7 +108,7 @@ func (s *Store) Add(ctx context.Context, caller scope.Caller, in AddInput) (Book
 	if err := tx.Commit(); err != nil {
 		return Book{}, fmt.Errorf("adding a book: %w", err)
 	}
-	return s.byCopyID(ctx, caller, copyID)
+	return s.ByCopyID(ctx, caller, copyID)
 }
 
 // findEdition looks for an edition already recorded under this ISBN in this
@@ -224,10 +227,10 @@ func sortableName(name string) string {
 }
 
 const selectBooks = `
-	SELECT c.id, w.id, w.title,
+	SELECT c.id, w.id, e.id, w.title,
 	       coalesce(group_concat(a.name, ', '), ''),
 	       coalesce(e.publisher, ''), coalesce(e.published_date, ''),
-	       coalesce(i.value, ''), c.created_at
+	       coalesce(i.value, ''), c.created_at, coalesce(e.cover_asset_id, '')
 	  FROM copy c
 	  JOIN edition e ON e.id = c.edition_id AND e.library_id = c.library_id
 	  JOIN work    w ON w.id = e.work_id    AND w.library_id = c.library_id
@@ -254,8 +257,8 @@ func (s *Store) List(ctx context.Context, caller scope.Caller) ([]Book, error) {
 	books := []Book{}
 	for rows.Next() {
 		var b Book
-		if err := rows.Scan(&b.CopyID, &b.WorkID, &b.Title, &b.Authors,
-			&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt); err != nil {
+		if err := rows.Scan(&b.CopyID, &b.WorkID, &b.EditionID, &b.Title, &b.Authors,
+			&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID); err != nil {
 			return nil, fmt.Errorf("listing books: %w", err)
 		}
 		books = append(books, b)
@@ -266,12 +269,13 @@ func (s *Store) List(ctx context.Context, caller scope.Caller) ([]Book, error) {
 	return books, nil
 }
 
-func (s *Store) byCopyID(ctx context.Context, caller scope.Caller, copyID string) (Book, error) {
+// ByCopyID returns one copy of the caller's library.
+func (s *Store) ByCopyID(ctx context.Context, caller scope.Caller, copyID string) (Book, error) {
 	var b Book
 	err := s.db.QueryRowContext(ctx,
 		selectBooks+` AND c.id = ? GROUP BY c.id`,
-		caller.LibraryID, copyID).Scan(&b.CopyID, &b.WorkID, &b.Title, &b.Authors,
-		&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt)
+		caller.LibraryID, copyID).Scan(&b.CopyID, &b.WorkID, &b.EditionID, &b.Title, &b.Authors,
+		&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID)
 	if err != nil {
 		return Book{}, fmt.Errorf("reading back the copy: %w", err)
 	}

@@ -23,7 +23,7 @@ import (
 // with a gigabyte must not take the instance down with it.
 const (
 	RequestTimeout  = 10 * time.Second
-	MaxResponseSize = 1 << 20 // 1 MiB
+	MaxResponseSize = 4 << 20 // 4 MiB, enough for a cover image
 )
 
 // ErrBlocked reports a request the client refused to make.

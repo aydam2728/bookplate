@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -9,15 +10,24 @@ import (
 	"github.com/aydam2728/bookplate/internal/platform/scope"
 )
 
+// CoverAttacher downloads a cover and points an edition at it. It is an
+// interface so the catalogue does not depend on how images are fetched or
+// stored, only that something can do it.
+type CoverAttacher interface {
+	AttachFromURL(ctx context.Context, caller scope.Caller, editionID, url string) error
+}
+
 // Handlers serves the catalogue endpoints.
 type Handlers struct {
 	store  *Store
+	covers CoverAttacher
 	logger *slog.Logger
 }
 
-// NewHandlers returns handlers over store.
-func NewHandlers(store *Store, logger *slog.Logger) *Handlers {
-	return &Handlers{store: store, logger: logger}
+// NewHandlers returns handlers over store. covers may be nil, in which case
+// books are catalogued without pictures.
+func NewHandlers(store *Store, covers CoverAttacher, logger *slog.Logger) *Handlers {
+	return &Handlers{store: store, covers: covers, logger: logger}
 }
 
 // Register adds the catalogue routes to mux.
@@ -75,6 +85,16 @@ func (h *Handlers) add(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		httpserver.WriteError(w, h.logger, http.StatusInternalServerError, "could not add the book", err)
 		return
+	}
+
+	// A cover is a nicety. Fetching it must never cost the person the book
+	// they just catalogued, so a failure is logged and the entry stands.
+	if h.covers != nil && in.CoverURL != "" {
+		if err := h.covers.AttachFromURL(r.Context(), caller, book.EditionID, in.CoverURL); err != nil {
+			h.logger.Warn("cover not attached", "edition", book.EditionID, "reason", err)
+		} else if updated, err := h.store.ByCopyID(r.Context(), caller, book.CopyID); err == nil {
+			book = updated
+		}
 	}
 
 	httpserver.WriteJSON(w, http.StatusCreated, book)

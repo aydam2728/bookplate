@@ -55,18 +55,30 @@ function render(books) {
 
   for (const book of books) {
     const item = document.createElement("li");
+    if (book.coverId) {
+      const cover = document.createElement("img");
+      cover.className = "cover";
+      // Served from this instance, never hotlinked: the image was fetched,
+      // re-encoded and cached when the book was added.
+      cover.src = `/api/covers/${encodeURIComponent(book.coverId)}`;
+      cover.alt = "";
+      cover.loading = "lazy";
+      item.append(cover);
+    }
+    const text = document.createElement("div");
     const title = document.createElement("div");
     title.className = "title";
     title.textContent = book.title;
-    item.append(title);
+    text.append(title);
 
     const bits = [book.authors, book.publisher, book.published, book.isbn13].filter(Boolean);
     if (bits.length) {
       const meta = document.createElement("div");
       meta.className = "meta";
       meta.textContent = bits.join(" · ");
-      item.append(meta);
+      text.append(meta);
     }
+    item.append(text);
     list.append(item);
   }
 }
@@ -166,6 +178,7 @@ el("lookup").addEventListener("click", async () => {
     fill("author", (found.authors || []).join(", "));
     fill("publisher", found.publisher);
     fill("published", found.published);
+    el("coverUrl").value = found.coverUrl || "";
     say(`Found “${found.title}”. Check it, then add it.`);
   } catch (error) {
     say(error.message, "error");
