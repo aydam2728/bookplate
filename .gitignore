@@ -1,0 +1,33 @@
+# Build output
+/bin/
+/dist/
+bookplate
+bookplate.exe
+
+# Runtime data: never commit a catalogue or a cover cache
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+web/dist/
+*.log
+
+# Go
+*.test
+coverage.out
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
