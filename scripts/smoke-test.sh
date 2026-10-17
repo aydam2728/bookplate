@@ -125,6 +125,15 @@ code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/lookup?isbn
 [ "$code" = "400" ] || fail "a mistyped ISBN returned $code, expected 400"
 pass "a mistyped ISBN is refused without a round trip"
 
+# Covers need the network, so only the refusals are asserted here.
+code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/covers/does-not-exist")
+[ "$code" = "404" ] || fail "an unknown cover returned $code, expected 404"
+pass "an unknown cover is 404"
+
+code=$(curl -s -o "$(mktemp)" -w '%{http_code}' "$base/api/covers/does-not-exist")
+[ "$code" = "401" ] || fail "an anonymous cover request returned $code, expected 401"
+pass "covers refuse an anonymous request"
+
 docker stop -t 20 "$NAME" >/dev/null
 exit_code=$(docker inspect "$NAME" --format '{{.State.ExitCode}}')
 [ "$exit_code" = "0" ] || fail "exited with $exit_code on SIGTERM, expected 0"

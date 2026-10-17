@@ -6,8 +6,9 @@ ratings and reading history.
 
 > **Status: pre-alpha.** The walking skeleton works: create the first account,
 > add books by hand or by ISBN, look an ISBN up in Open Library, and see them
-> on a shelf. Nothing is published yet, and there are no covers, no places, no
-> ratings and no second user. Do not trust it with a catalogue you care about.
+> on a shelf with its cover. Nothing is published yet, and there are no
+> places, no ratings and no second user. Do not trust it with a catalogue you
+> care about.
 
 ## Try it
 
