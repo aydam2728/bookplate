@@ -5,9 +5,9 @@ know which shelf the book is on, and let everyone in the household keep their ow
 ratings and reading history.
 
 > **Status: pre-alpha.** The walking skeleton works: create the first account,
-> add books by hand or by ISBN, see them on a shelf. Nothing is published yet,
-> there is no metadata lookup, no places, no ratings and no second user. Do not
-> trust it with a catalogue you care about.
+> add books by hand or by ISBN, look an ISBN up in Open Library, and see them
+> on a shelf. Nothing is published yet, and there are no covers, no places, no
+> ratings and no second user. Do not trust it with a catalogue you care about.
 
 ## Try it
 

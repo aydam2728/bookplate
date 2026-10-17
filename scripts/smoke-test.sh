@@ -93,6 +93,38 @@ code=$(curl -s -o "$(mktemp)" -w '%{http_code}' "http://127.0.0.1:${PORT}/api/bo
 [ "$code" = "401" ] || fail "the shelf answered $code without a session, expected 401"
 pass "the shelf refuses an anonymous request"
 
+# The whole journey, end to end and entirely offline: create the first
+# account, add a book, read it back.
+jar=$(mktemp)
+json="Content-Type: application/json"
+base="http://127.0.0.1:${PORT}"
+
+curl -fsS -c "$jar" -H "$json" -o /dev/null \
+  -d '{"email":"smoke@example.org","displayName":"Smoke","password":"a long enough passphrase","libraryName":"Smoke"}' \
+  "$base/api/setup" || fail "first-run setup failed"
+pass "first-run setup creates the administrator"
+
+code=$(curl -s -o "$(mktemp)" -w '%{http_code}' -H "$json" \
+  -d '{"email":"other@example.org","displayName":"Other","password":"another long passphrase","libraryName":"Theirs"}' \
+  "$base/api/setup")
+[ "$code" = "409" ] || fail "a second setup returned $code, expected 409"
+pass "setup refuses to run twice"
+
+curl -fsS -b "$jar" -H "$json" -o /dev/null \
+  -d '{"title":"Fantastic Mr Fox","author":"Roald Dahl","isbn":"9780140328721"}' \
+  "$base/api/books" || fail "adding a book failed"
+pass "a book is added"
+
+curl -fsS -b "$jar" "$base/api/books" | grep -q "Fantastic Mr Fox" \
+  || fail "the book just added is not on the shelf"
+pass "the shelf shows the book"
+
+# Validation happens before anything leaves the instance, so this needs no
+# network and is safe to assert in CI.
+code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/lookup?isbn=9780140328722")
+[ "$code" = "400" ] || fail "a mistyped ISBN returned $code, expected 400"
+pass "a mistyped ISBN is refused without a round trip"
+
 docker stop -t 20 "$NAME" >/dev/null
 exit_code=$(docker inspect "$NAME" --format '{{.State.ExitCode}}')
 [ "$exit_code" = "0" ] || fail "exited with $exit_code on SIGTERM, expected 0"
