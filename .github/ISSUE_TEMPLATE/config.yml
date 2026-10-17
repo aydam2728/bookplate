@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or idea
-    url: https://github.com/OWNER/bookplate/discussions
+    url: https://github.com/aydam2728/bookplate/discussions
     about: Discussions are for questions and ideas. Issues are for confirmed bugs and agreed work.
   - name: Security vulnerability
-    url: https://github.com/OWNER/bookplate/security/advisories/new
+    url: https://github.com/aydam2728/bookplate/security/advisories/new
     about: Report privately. Never open a public issue for a vulnerability.
