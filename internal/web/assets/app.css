@@ -61,3 +61,13 @@ li .cover {
   width: 44px; height: 66px; flex: none; object-fit: cover;
   border-radius: 4px; background: var(--line);
 }
+li.place {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 7px 14px; margin-bottom: 4px;
+}
+.with-button select { flex: 1; max-width: 220px; }
+select {
+  padding: 9px 11px; font: inherit; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  width: 100%; margin-top: 4px;
+}
