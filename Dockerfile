@@ -25,6 +25,11 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/bookplate ./cmd/bookplate
 
+# A named volume inherits the ownership the image has at that path. Without
+# this, Docker creates /data owned by root and the unprivileged user cannot
+# open the database.
+RUN mkdir -p /out/data
+
 # distroless/static carries CA certificates and nothing else: no shell, no
 # package manager, no curl. After a breakout there is no tooling to reuse.
 FROM gcr.io/distroless/static-debian12:nonroot
@@ -38,6 +43,7 @@ LABEL org.opencontainers.image.title="BookPlate" \
       org.opencontainers.image.version="${VERSION}"
 
 COPY --from=build /out/bookplate /bookplate
+COPY --from=build --chown=65532:65532 /out/data /data
 
 # /data holds the database and the cover cache. It is the only path the server
 # writes to, which is what makes a read-only root filesystem possible.

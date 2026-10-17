@@ -169,3 +169,24 @@ func apply(ctx context.Context, db *sql.DB, m migration) error {
 	}
 	return nil
 }
+
+// HasSchema reports whether this database has been migrated before. A file
+// created a moment ago has nothing worth backing up.
+func HasSchema(ctx context.Context, db *sql.DB) (bool, error) {
+	var tables int
+	err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migration'`,
+	).Scan(&tables)
+	if err != nil {
+		return false, fmt.Errorf("looking for schema_migration: %w", err)
+	}
+	if tables == 0 {
+		return false, nil
+	}
+
+	var rows int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migration`).Scan(&rows); err != nil {
+		return false, fmt.Errorf("counting applied migrations: %w", err)
+	}
+	return rows > 0, nil
+}

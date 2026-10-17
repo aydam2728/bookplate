@@ -1,8 +1,9 @@
 // Command bookplate runs the BookPlate server.
 //
-// It does three things and nothing else: resolve the configuration, build the
-// server, and run it until the process is asked to stop. Everything else lives
-// behind a package, so that it can be tested without starting a process.
+// It resolves the configuration, opens and migrates the database, builds the
+// server and runs it until the process is asked to stop. Everything else
+// lives behind a package, so that it can be tested without starting a
+// process.
 //
 // The "healthcheck" subcommand probes a running instance. The container image
 // uses it so that it needs no shell, curl or wget of its own.
@@ -10,6 +11,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,6 +19,7 @@ import (
 	"syscall"
 
 	"github.com/aydam2728/bookplate/internal/platform/config"
+	"github.com/aydam2728/bookplate/internal/platform/database"
 	"github.com/aydam2728/bookplate/internal/platform/httpserver"
 )
 
@@ -56,14 +59,50 @@ func serve() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Nothing to wait for yet. The database readiness probe lands with the
-	// database.
-	srv := httpserver.New(cfg.Addr, logger, nil)
+	db, err := database.Open(ctx, cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := prepareSchema(ctx, db, cfg.DataDir, logger); err != nil {
+		return err
+	}
+
+	srv := httpserver.New(cfg.Addr, logger, func(ctx context.Context) error {
+		return database.Ready(ctx, db)
+	})
 
 	if err := httpserver.Run(ctx, srv, logger); err != nil {
 		return fmt.Errorf("serving: %w", err)
 	}
 	logger.Info("stopped")
+	return nil
+}
+
+// prepareSchema backs up an existing database before changing its shape, then
+// migrates. A refusal here stops the process on purpose: starting on a schema
+// the binary does not understand is how data gets corrupted.
+func prepareSchema(ctx context.Context, db *sql.DB, dir string, logger *slog.Logger) error {
+	existing, err := database.HasSchema(ctx, db)
+	if err != nil {
+		return err
+	}
+	if existing {
+		path, err := database.Backup(ctx, db, dir)
+		if err != nil {
+			return fmt.Errorf("refusing to migrate without a backup: %w", err)
+		}
+		logger.Info("backed up before migrating", "path", path)
+	}
+
+	applied, err := database.Migrate(ctx, db, database.Migrations())
+	if err != nil {
+		return err
+	}
+	if len(applied) > 0 {
+		logger.Info("schema migrated", "applied", applied)
+	}
 	return nil
 }
 
