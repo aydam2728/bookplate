@@ -41,6 +41,24 @@ Out of scope:
 - Denial of service through sheer bandwidth
 - An instance deliberately run without TLS or with a shared admin password
 
+## Verifying what you run
+
+Every published image carries a provenance attestation signed through Sigstore
+and bound to the workflow that built it. No maintainer holds a signing key, so
+there is no key to steal.
+
+Before running an image, check that the digest you are about to pull really
+came from this repository:
+
+```
+gh attestation verify oci://ghcr.io/aydam2728/bookplate:... \n  --repo aydam2728/bookplate
+```
+
+A software bill of materials is attached to the image itself rather than to a
+release asset, so it travels with whatever you actually pulled.
+
+Nothing is published yet. These commands become useful at the first release.
+
 ## Hardening expectations
 
 The shipped compose file is hardened by default: non-root user, read-only root
