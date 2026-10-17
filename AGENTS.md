@@ -61,8 +61,9 @@ Breaking one of these is a reason to reject a change even if it works.
 - **Tests against the real SQLite engine**, never a stub. The interesting bugs
   live in queries and transactions.
 - **One commit per logical change**, written as you go, on a branch cut from
-  `main`. Never commit to `main`, never rewrite published history. See
-  `docs/git-workflow.md`.
+  `main`. Never commit to `main`, never merge into `main`, never rewrite
+  published history. Push the branch and stop: whether and when it lands is
+  the maintainer's decision, not yours. See `docs/git-workflow.md`.
 - **Every route ships its authorisation triplet**: a legitimate actor succeeds,
   an actor from another library fails, an anonymous caller fails.
 

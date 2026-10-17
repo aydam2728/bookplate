@@ -92,7 +92,8 @@ image.
 Same rules, no exemption. Specifically:
 
 - One commit per logical change, written as you go.
-- Never commit directly to `main`.
+- Never commit directly to `main`, and never merge into it. Push the branch
+  and stop. Whether and when the work lands is the maintainer's decision.
 - Never rewrite published history.
 - A commit mostly produced by an agent carries a `Co-Authored-By:` trailer
   naming it, which is how the disclosure rule in `AGENTS.md` is satisfied at
