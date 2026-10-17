@@ -25,4 +25,5 @@ docs/
 LICENSE
 Makefile
 compose.yaml
+compose.dev.yaml
 Dockerfile

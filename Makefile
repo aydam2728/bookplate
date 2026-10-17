@@ -55,3 +55,11 @@ image: ## Build the container image for this machine architecture
 image-multiarch: ## Build for amd64 and arm64 without publishing
 	docker buildx build --platform linux/amd64,linux/arm64 \
 		--build-arg VERSION=$(VERSION) -t $(IMAGE):$(VERSION) .
+
+.PHONY: dev
+dev: ## Build from these sources and run the container locally
+	docker compose -f compose.dev.yaml up --build -d
+
+.PHONY: dev-down
+dev-down: ## Stop the local container and drop its volume
+	docker compose -f compose.dev.yaml down -v

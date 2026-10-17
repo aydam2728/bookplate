@@ -30,6 +30,26 @@ and developer documentation. This is the condition for receiving contributions
 from outside France. User-facing documentation is bilingual English and French,
 and French is welcome in discussions.
 
+## Running it
+
+From a clean clone, with Docker and nothing else:
+
+```
+make dev        # builds from these sources, starts the hardened container
+make dev-down   # stops it and drops its volume
+```
+
+With Go installed, no container:
+
+```
+make run        # http://localhost:8080
+```
+
+`compose.yaml` is the operator file: it runs a published image, so it will not
+work from a clean clone until a release exists. `compose.dev.yaml` is the one
+that builds. Both apply the same hardening, deliberately: a development setup
+that drops it lets a change pass locally and fail for every user.
+
 ## What will be checked
 
 Every one of these is blocking. None of them is advisory.

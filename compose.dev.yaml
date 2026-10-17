@@ -1,0 +1,42 @@
+# Run BookPlate from the sources in this checkout.
+#
+# compose.yaml runs a published image. This file builds the one in front of
+# you. They are kept separate on purpose: a production file that can also
+# build is a production file somebody eventually builds from by accident.
+#
+#   docker compose -f compose.dev.yaml up --build     (or: make dev)
+#
+# The hardening below is identical to compose.yaml. A development setup that
+# drops it would let a change pass locally and fail for every user.
+
+services:
+  bookplate:
+    build:
+      context: .
+      args:
+        VERSION: dev
+    image: bookplate:dev
+    restart: unless-stopped
+
+    environment:
+      BOOKPLATE_ADDR: ":8080"
+      BOOKPLATE_DATA_DIR: "/data"
+      BOOKPLATE_LOG_LEVEL: "debug"
+
+    volumes:
+      - bookplate-dev-data:/data
+
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    user: "65532:65532"
+
+volumes:
+  bookplate-dev-data:
