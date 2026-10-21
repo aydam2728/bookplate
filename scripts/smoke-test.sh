@@ -196,6 +196,39 @@ code=$(curl -s -o "$(mktemp)" -w '%{http_code}' "$base/api/works/$work/rating")
 [ "$code" = "401" ] || fail "an anonymous rating request returned $code, expected 401"
 pass "ratings refuse an anonymous request"
 
+# Searching: the accents are folded both ways, every word has to appear, and
+# a barcode finds a book whether or not the hyphens were typed.
+printf '{"title":"Le H\303\251risson","author":"Muriel Barbery","placeId":"%s"}' "$shelf" > "$body"
+curl -fsS -b "$jar" -H "$json" --data-binary "@$body" -o /dev/null "$base/api/books" \
+  || fail "adding a book to search for failed"
+herisson=$(printf 'Le H\303\251risson')
+
+curl -fsS -b "$jar" "$base/api/books?q=herisson" | grep -q "$herisson" \
+  || fail "an accented title was not found by its unaccented spelling"
+curl -fsS -b "$jar" "$base/api/books?q=barbery%20herisson" | grep -q "$herisson" \
+  || fail "two words in any order did not find the book"
+curl -fsS -b "$jar" "$base/api/books?q=978-0-14-032872-1" | grep -q "Fantastic Mr Fox" \
+  || fail "a hyphenated barcode did not find the copy"
+[ "$(curl -fsS -b "$jar" "$base/api/books?q=zzzznotathing")" = "[]" ] \
+  || fail "a search that matches nothing returned something"
+pass "a book is found by title, by author and by barcode"
+
+# The place filter takes the subtree: the house holds the shelf.
+curl -fsS -b "$jar" "$base/api/books?placeId=$house" | grep -q "$herisson" \
+  || fail "filtering on the house missed what sits on its shelf"
+if curl -fsS -b "$jar" "$base/api/books?placeId=none" | grep -q "$herisson"; then
+  fail "a filed book appeared among the unfiled"
+fi
+curl -fsS -b "$jar" "$base/api/books?placeId=none" | grep -q "Fantastic Mr Fox" \
+  || fail "the unfiled filter did not return an unfiled book"
+pass "a place filter takes everything under it"
+
+long=$(printf 'a%.0s' $(seq 201))
+code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' --get \
+  --data-urlencode "q=$long" "$base/api/books")
+[ "$code" = "400" ] || fail "a 201-character search returned $code, expected 400"
+pass "an oversized search is refused"
+
 # Validation happens before anything leaves the instance, so this needs no
 # network and is safe to assert in CI.
 code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/lookup?isbn=9780140328722")
