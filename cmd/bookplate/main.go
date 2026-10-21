@@ -26,6 +26,7 @@ import (
 	"github.com/aydam2728/bookplate/internal/platform/config"
 	"github.com/aydam2728/bookplate/internal/platform/database"
 	"github.com/aydam2728/bookplate/internal/platform/httpserver"
+	"github.com/aydam2728/bookplate/internal/rating"
 	"github.com/aydam2728/bookplate/internal/web"
 )
 
@@ -97,6 +98,7 @@ func serve() error {
 
 	books := catalog.NewHandlers(catalog.NewStore(db), coverService, logger)
 	shelves := places.NewHandlers(places.NewStore(db), logger)
+	opinions := rating.NewHandlers(rating.NewStore(db), logger)
 
 	// Open Library is the only provider enabled without an operator opting
 	// in: its data is in the public domain and it needs no key.
@@ -121,6 +123,7 @@ func serve() error {
 		func(mux *http.ServeMux) { lookups.Register(mux, accounts.Protect) },
 		func(mux *http.ServeMux) { coverRoutes.Register(mux, accounts.Protect) },
 		func(mux *http.ServeMux) { shelves.Register(mux, accounts.Protect) },
+		func(mux *http.ServeMux) { opinions.Register(mux, accounts.Protect) },
 		web.Register,
 	)
 	// Security headers wrap everything, including the operational endpoints.
