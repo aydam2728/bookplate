@@ -150,3 +150,20 @@ func TestSave_RefusesABomb(t *testing.T) {
 		t.Errorf("a decompression bomb reached the disk, err = %v", err)
 	}
 }
+
+func TestCredit(t *testing.T) {
+	for _, c := range []struct{ target, want string }{
+		{"https://covers.openlibrary.org/b/id/14314874-L.jpg", "Open Library"},
+		{"https://books.google.com/books/content?id=x&printsec=frontcover", "Google Books"},
+		{"https://inventaire.io/img/entities/abc", "Inventaire"},
+		// A host nobody has named is credited by its own name. The stored
+		// credit then says something true rather than something convenient.
+		{"https://example.org/cover.jpg", "example.org"},
+		{"not a url at all", "unknown"},
+		{"", "unknown"},
+	} {
+		if got := covers.Credit(c.target); got != c.want {
+			t.Errorf("Credit(%q) = %q, want %q", c.target, got, c.want)
+		}
+	}
+}

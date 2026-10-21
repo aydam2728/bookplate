@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/aydam2728/bookplate/internal/platform/httpserver"
 	"github.com/aydam2728/bookplate/internal/platform/scope"
@@ -13,6 +14,35 @@ import (
 // CoversHost is the only host cover images may be fetched from. It is
 // separate from the catalogue host and has to be allowed explicitly.
 const CoversHost = "covers.openlibrary.org"
+
+// credits names the source of a cover for the attribution stored beside it.
+//
+// The host is the evidence. It is what the outbound allow-list let through,
+// so it cannot be whatever a form claimed, and the picture no longer always
+// comes from the catalogue that described the book: a BnF record is
+// completed with somebody else's cover.
+//
+// The metadata package names the same hosts as constants. Two strings are
+// repeated here rather than making storage depend on the readers above it.
+var credits = map[string]string{
+	CoversHost:         "Open Library",
+	"books.google.com": "Google Books",
+	"inventaire.io":    "Inventaire",
+}
+
+// Credit names where a cover came from, for the attribution a stored cover
+// carries. A host nobody has named is credited by its own name rather than
+// guessed at: a plain credit is better than a wrong one.
+func Credit(target string) string {
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Hostname() == "" {
+		return "unknown"
+	}
+	if credit, ok := credits[parsed.Hostname()]; ok {
+		return credit
+	}
+	return parsed.Hostname()
+}
 
 // fetcher is the one thing this package needs from the network, which lets a
 // test drive it without any network at all.
@@ -46,7 +76,7 @@ func (s *Service) AttachFromURL(ctx context.Context, caller scope.Caller, editio
 		return fmt.Errorf("fetching the cover: %w", err)
 	}
 
-	assetID, err := s.store.Save(ctx, caller, raw, url, "Open Library")
+	assetID, err := s.store.Save(ctx, caller, raw, url, Credit(url))
 	if err != nil {
 		return err
 	}
