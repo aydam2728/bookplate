@@ -229,6 +229,28 @@ code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' --get \
 [ "$code" = "400" ] || fail "a 201-character search returned $code, expected 400"
 pass "an oversized search is refused"
 
+# Re-shelving a wall: many copies in one request, and the same request with
+# no place un-files them again.
+one=$(curl -fsS -b "$jar" -H "$json" -d '{"title":"Boxed one"}' "$base/api/books" \
+  | sed -n 's/.*"copyId":"\([^"]*\)".*/\1/p')
+two=$(curl -fsS -b "$jar" -H "$json" -d '{"title":"Boxed two"}' "$base/api/books" \
+  | sed -n 's/.*"copyId":"\([^"]*\)".*/\1/p')
+[ -n "$one" ] && [ -n "$two" ] || fail "adding the books to move returned no identifiers"
+
+printf '{"copyIds":["%s","%s"],"placeId":"%s"}' "$one" "$two" "$shelf" > "$body"
+curl -fsS -b "$jar" -H "$json" --data-binary "@$body" "$base/api/places/assign" \
+  | grep -q '"moved":2' || fail "moving two copies at once did not report two"
+curl -fsS -b "$jar" "$base/api/books?placeId=$shelf" | grep -q "Boxed two" \
+  || fail "a moved copy is not in the place it moved to"
+pass "many copies move in one request"
+
+printf '{"copyIds":["%s"],"placeId":""}' "$one" > "$body"
+curl -fsS -b "$jar" -H "$json" --data-binary "@$body" "$base/api/places/assign" \
+  | grep -q '"moved":1' || fail "un-filing a copy did not report one"
+curl -fsS -b "$jar" "$base/api/books?placeId=none" | grep -q "Boxed one" \
+  || fail "an un-filed copy is not among the unfiled"
+pass "an empty place un-files the copies"
+
 # Validation happens before anything leaves the instance, so this needs no
 # network and is safe to assert in CI.
 code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/lookup?isbn=9780140328722")
