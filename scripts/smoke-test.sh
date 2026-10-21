@@ -143,7 +143,7 @@ curl -fsS -b "$jar" "$base/api/places" | grep -q "$expected" \
 pass "accented names survive"
 
 printf '{"title":"A filed book","placeId":"%s"}' "$shelf" > "$body"
-curl -fsS -b "$jar" -H "$json" --data-binary "@$body" -o /dev/null "$base/api/books" \
+filed=$(curl -fsS -b "$jar" -H "$json" --data-binary "@$body" "$base/api/books") \
   || fail "filing a book into a place failed"
 curl -fsS -b "$jar" "$base/api/books" | grep -q "\"placeName\":\"$expected\"" \
   || fail "the shelf view does not say where the book is"
@@ -154,6 +154,47 @@ curl -fsS -b "$jar" "$base/api/places" \
   | grep -q '"name":"Maison".*"depth":0,"copies":1' \
   || fail "the count did not reach the top of the tree"
 pass "counts reach every ancestor"
+
+# The detail view: one book, its own page, and what one person thinks of it.
+copy=$(printf '%s' "$filed" | sed -n 's/.*"copyId":"\([^"]*\)".*/\1/p')
+work=$(printf '%s' "$filed" | sed -n 's/.*"workId":"\([^"]*\)".*/\1/p')
+[ -n "$copy" ] && [ -n "$work" ] || fail "adding a book returned no identifiers"
+
+curl -fsS -b "$jar" "$base/api/books/$copy" | grep -q '"title":"A filed book"' \
+  || fail "the detail view does not return the book"
+pass "one book has its own page"
+
+printf '{"summary":"R\303\251sum\303\251 \303\251crit \303\240 la main.","notes":"D\303\251dicac\303\251.","placeId":""}' > "$body"
+summary=$(printf 'R\303\251sum\303\251 \303\251crit \303\240 la main.')
+curl -fsS -b "$jar" -X PATCH -H "$json" --data-binary "@$body" "$base/api/books/$copy" \
+  | grep -q "\"summary\":\"$summary\"" \
+  || fail "editing the book did not keep the summary"
+curl -fsS -b "$jar" "$base/api/books/$copy" | grep -q '"placeName":""' \
+  || fail "an empty place did not un-file the copy"
+pass "a copy is edited and un-filed"
+
+code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' -X PATCH -H "$json" \
+  -d '{"placeId":"no-such-place"}' "$base/api/books/$copy")
+[ "$code" = "400" ] || fail "moving a copy to an unknown place returned $code, expected 400"
+pass "an unknown place is refused"
+
+# A rating is in half stars, so nine is four and a half.
+curl -fsS -b "$jar" -X PUT -H "$json" \
+  -d '{"rating":9,"status":"read","visibility":"household","review":"Kept me up."}' \
+  "$base/api/works/$work/rating" | grep -q '"average":9,"count":1' \
+  || fail "the household average did not follow the rating"
+curl -fsS -b "$jar" "$base/api/works/$work/rating" | grep -q '"rating":9' \
+  || fail "the rating was not stored"
+pass "a book is rated and the household average follows"
+
+code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' -X PUT -H "$json" \
+  -d '{"rating":11}' "$base/api/works/$work/rating")
+[ "$code" = "400" ] || fail "a rating of 11 returned $code, expected 400"
+pass "a rating beyond the scale is refused"
+
+code=$(curl -s -o "$(mktemp)" -w '%{http_code}' "$base/api/works/$work/rating")
+[ "$code" = "401" ] || fail "an anonymous rating request returned $code, expected 401"
+pass "ratings refuse an anonymous request"
 
 # Validation happens before anything leaves the instance, so this needs no
 # network and is safe to assert in CI.
