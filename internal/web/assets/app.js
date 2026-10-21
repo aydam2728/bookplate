@@ -47,6 +47,16 @@ function fields(form) {
 
 // textContent everywhere, never innerHTML: a title is typed by a person and
 // one day will come from a public metadata API that strangers can edit.
+// The copies the person has ticked, by copy identifier. A household
+// reorganises a wall rather than a book, so the shelf can move many at once.
+const selected = new Set();
+
+function showSelection() {
+  el("selection").hidden = selected.size === 0;
+  el("selected-count").textContent = selected.size === 1
+    ? "1 book chosen" : `${selected.size} books chosen`;
+}
+
 function render(books) {
   const list = el("books");
   list.replaceChildren();
@@ -60,6 +70,15 @@ function render(books) {
   el("count").textContent = books.length
     ? `· ${books.length}${narrowed ? " found" : ""}` : "";
 
+  // A line that is no longer listed cannot stay selected: a move must never
+  // touch a book the person cannot see.
+  const listed = new Set(books.map((book) => book.copyId));
+  for (const copyId of selected) {
+    if (!listed.has(copyId)) {
+      selected.delete(copyId);
+    }
+  }
+
   for (const book of books) {
     const item = document.createElement("li");
     // The whole line opens the book's own page, so it carries both
@@ -68,8 +87,17 @@ function render(books) {
     item.className = "book";
     item.dataset.copyId = book.copyId;
     item.dataset.workId = book.workId;
-    item.tabIndex = 0;
-    item.setAttribute("role", "button");
+
+    // Re-shelving a wall means picking many books, so every line carries a
+    // box. The box keeps its own semantics: it is not inside the thing that
+    // opens the book, or a screen reader would announce one control.
+    const pick = document.createElement("input");
+    pick.type = "checkbox";
+    pick.className = "pick";
+    pick.checked = selected.has(book.copyId);
+    pick.setAttribute("aria-label", `Select ${book.title}`);
+    item.append(pick);
+
     if (book.coverId) {
       const cover = document.createElement("img");
       cover.className = "cover";
@@ -81,8 +109,11 @@ function render(books) {
       item.append(cover);
     }
     const text = document.createElement("div");
-    const title = document.createElement("div");
-    title.className = "title";
+    // The title is a real button, so a keyboard reaches the book by tabbing
+    // and Enter, and the mouse gets the whole line through the handler below.
+    const title = document.createElement("button");
+    title.type = "button";
+    title.className = "title open";
     title.textContent = book.title;
     text.append(title);
 
@@ -97,6 +128,7 @@ function render(books) {
     item.append(text);
     list.append(item);
   }
+  showSelection();
 }
 
 // The shelf is whatever the two controls say it is, so every refresh reads
@@ -261,6 +293,7 @@ function renderPlaces(tree) {
     ["book-place", [["", "Not filed yet"]]],
     ["detail-place", [["", "Not filed yet"]]],
     ["filter-place", [["", "Everywhere"], ["none", "Not filed yet"]]],
+    ["move-place", [["", "Not filed yet"]]],
   ]) {
     const select = el(id);
     const chosen = select.value;
@@ -377,21 +410,20 @@ function openFrom(item) {
 
 el("books").addEventListener("click", (event) => {
   const item = event.target.closest("li.book");
-  if (item) {
-    openFrom(item);
-  }
-});
-
-el("books").addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") {
-    return;
-  }
-  const item = event.target.closest("li.book");
   if (!item) {
     return;
   }
-  // Space would scroll the page instead of opening the book.
-  event.preventDefault();
+  // The box is for choosing, the rest of the line for opening. Ticking a box
+  // must not also open the book.
+  if (event.target.closest("input.pick")) {
+    if (event.target.checked) {
+      selected.add(item.dataset.copyId);
+    } else {
+      selected.delete(item.dataset.copyId);
+    }
+    showSelection();
+    return;
+  }
   openFrom(item);
 });
 
@@ -479,4 +511,32 @@ el("places").addEventListener("keydown", (event) => {
   // Space would scroll the page instead of filtering.
   event.preventDefault();
   filterTo(item.dataset.placeId);
+});
+
+// Moving the chosen books is one request, not one per book: the store files
+// them in a single statement and answers with how many actually moved.
+el("move").addEventListener("click", async () => {
+  const button = el("move");
+  button.disabled = true;
+  try {
+    const result = await call("POST", "/api/places/assign", {
+      copyIds: [...selected],
+      placeId: el("move-place").value,
+    });
+    selected.clear();
+    say(result.moved === 1 ? "One book moved." : `${result.moved} books moved.`);
+    await refresh();
+  } catch (error) {
+    say(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+el("unselect").addEventListener("click", () => {
+  selected.clear();
+  for (const box of el("books").querySelectorAll("input.pick")) {
+    box.checked = false;
+  }
+  showSelection();
 });

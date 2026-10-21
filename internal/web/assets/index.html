@@ -89,6 +89,15 @@
       <button id="clear-search" type="button">Clear</button>
     </div>
 
+    <div id="selection" class="with-button" hidden>
+      <span id="selected-count" class="muted"></span>
+      <select id="move-place" aria-label="Where to move them">
+        <option value="">Not filed yet</option>
+      </select>
+      <button id="move" type="button">Move them</button>
+      <button id="unselect" type="button" class="link">Clear the selection</button>
+    </div>
+
     <ul id="books"></ul>
     <p id="empty" class="muted" hidden>Nothing on the shelf yet.</p>
   </section>

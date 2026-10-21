@@ -88,8 +88,17 @@ h3 { font-size: 15px; margin: 22px 0 6px; }
 li.book { cursor: pointer; }
 li.book:hover { border-color: var(--accent); }
 #back { margin-bottom: 4px; }
-li.book:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 li.place { cursor: pointer; }
 li.place:hover span:first-child { text-decoration: underline; }
 li.place:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 input[type=search] { min-width: 0; }
+li.book .pick { flex: none; width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); }
+button.open {
+  display: block; padding: 0; border: 0; background: none; font: inherit;
+  color: inherit; text-align: left; cursor: pointer;
+}
+button.open:hover { text-decoration: underline; }
+#selection { margin: 10px 0 14px; align-items: center; }
+#selection .muted { white-space: nowrap; }
+#move { background: var(--accent); color: var(--bg); border-color: transparent; }
+#selection button.link { background: none; border: 0; color: var(--muted); }
