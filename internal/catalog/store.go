@@ -31,6 +31,8 @@ type Book struct {
 	CoverID   string `json:"coverId"`
 	PlaceID   string `json:"placeId"`
 	PlaceName string `json:"placeName"`
+	Summary   string `json:"summary"`
+	Notes     string `json:"notes"`
 	AddedAt   string `json:"addedAt"`
 }
 
@@ -234,7 +236,8 @@ const selectBooks = `
 	       coalesce(group_concat(a.name, ', '), ''),
 	       coalesce(e.publisher, ''), coalesce(e.published_date, ''),
 	       coalesce(i.value, ''), c.created_at, coalesce(e.cover_asset_id, ''),
-	       coalesce(c.place_id, ''), coalesce(pl.name, '')
+	       coalesce(c.place_id, ''), coalesce(pl.name, ''),
+	       coalesce(w.summary, ''), coalesce(c.notes, '')
 	  FROM copy c
 	  JOIN edition e ON e.id = c.edition_id AND e.library_id = c.library_id
 	  JOIN work    w ON w.id = e.work_id    AND w.library_id = c.library_id
@@ -264,7 +267,7 @@ func (s *Store) List(ctx context.Context, caller scope.Caller) ([]Book, error) {
 		var b Book
 		if err := rows.Scan(&b.CopyID, &b.WorkID, &b.EditionID, &b.Title, &b.Authors,
 			&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID,
-			&b.PlaceID, &b.PlaceName); err != nil {
+			&b.PlaceID, &b.PlaceName, &b.Summary, &b.Notes); err != nil {
 			return nil, fmt.Errorf("listing books: %w", err)
 		}
 		books = append(books, b)
@@ -282,9 +285,89 @@ func (s *Store) ByCopyID(ctx context.Context, caller scope.Caller, copyID string
 		selectBooks+` AND c.id = ? GROUP BY c.id`,
 		caller.LibraryID, copyID).Scan(&b.CopyID, &b.WorkID, &b.EditionID, &b.Title, &b.Authors,
 		&b.Publisher, &b.Published, &b.ISBN13, &b.AddedAt, &b.CoverID,
-		&b.PlaceID, &b.PlaceName)
+		&b.PlaceID, &b.PlaceName, &b.Summary, &b.Notes)
 	if err != nil {
 		return Book{}, fmt.Errorf("reading back the copy: %w", err)
 	}
 	return b, nil
+}
+
+// Edit is what a person may change about a copy from its detail view.
+// A nil field is left alone, so changing the place does not wipe the notes.
+type Edit struct {
+	Summary *string `json:"summary"`
+	Notes   *string `json:"notes"`
+	PlaceID *string `json:"placeId"`
+}
+
+// Update changes a copy and the work it belongs to.
+//
+// The summary lives on the work, the notes and the place on the copy: two
+// people owning the same book share the description and keep their own notes.
+func (s *Store) Update(ctx context.Context, caller scope.Caller, copyID string, in Edit) (Book, error) {
+	if err := caller.RequireEdit(); err != nil {
+		return Book{}, err
+	}
+
+	current, err := s.ByCopyID(ctx, caller, copyID)
+	if err != nil {
+		return Book{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Book{}, fmt.Errorf("updating the book: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	if in.Summary != nil {
+		_, err = tx.ExecContext(ctx,
+			`UPDATE work SET summary = nullif(?, ''), updated_at = ?
+			  WHERE id = ? AND library_id = ?`,
+			strings.TrimSpace(*in.Summary), now, current.WorkID, caller.LibraryID)
+		if err != nil {
+			return Book{}, fmt.Errorf("updating the summary: %w", err)
+		}
+	}
+	if in.Notes != nil {
+		_, err = tx.ExecContext(ctx,
+			`UPDATE copy SET notes = nullif(?, ''), updated_at = ?
+			  WHERE id = ? AND library_id = ?`,
+			strings.TrimSpace(*in.Notes), now, copyID, caller.LibraryID)
+		if err != nil {
+			return Book{}, fmt.Errorf("updating the notes: %w", err)
+		}
+	}
+	if in.PlaceID != nil {
+		// An empty identifier un-files the copy rather than failing: "not
+		// filed yet" is a state a person chooses.
+		place := strings.TrimSpace(*in.PlaceID)
+		if place != "" {
+			var exists int
+			err = tx.QueryRowContext(ctx,
+				`SELECT count(*) FROM place
+				  WHERE id = ? AND library_id = ? AND deleted_at IS NULL`,
+				place, caller.LibraryID).Scan(&exists)
+			if err != nil {
+				return Book{}, fmt.Errorf("looking for the place: %w", err)
+			}
+			if exists == 0 {
+				return Book{}, fmt.Errorf("%w: no such place", ErrInvalid)
+			}
+		}
+		_, err = tx.ExecContext(ctx,
+			`UPDATE copy SET place_id = nullif(?, ''), updated_at = ?
+			  WHERE id = ? AND library_id = ?`,
+			place, now, copyID, caller.LibraryID)
+		if err != nil {
+			return Book{}, fmt.Errorf("moving the copy: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Book{}, fmt.Errorf("updating the book: %w", err)
+	}
+	return s.ByCopyID(ctx, caller, copyID)
 }

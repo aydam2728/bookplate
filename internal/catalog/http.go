@@ -37,6 +37,8 @@ func NewHandlers(store *Store, covers CoverAttacher, logger *slog.Logger) *Handl
 func (h *Handlers) Register(mux *http.ServeMux, protect func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/books", protect(h.list))
 	mux.HandleFunc("POST /api/books", protect(h.add))
+	mux.HandleFunc("GET /api/books/{id}", protect(h.one))
+	mux.HandleFunc("PATCH /api/books/{id}", protect(h.update))
 }
 
 func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
@@ -98,4 +100,49 @@ func (h *Handlers) add(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpserver.WriteJSON(w, http.StatusCreated, book)
+}
+
+func (h *Handlers) one(w http.ResponseWriter, r *http.Request) {
+	caller, err := scope.FromContext(r.Context())
+	if err != nil {
+		httpserver.WriteError(w, h.logger, http.StatusUnauthorized, "sign in first", err)
+		return
+	}
+
+	book, err := h.store.ByCopyID(r.Context(), caller, r.PathValue("id"))
+	if err != nil {
+		// One answer whether the copy does not exist or belongs to another
+		// household: telling them apart would confirm it exists.
+		httpserver.WriteError(w, nil, http.StatusNotFound, "no such book", nil)
+		return
+	}
+	httpserver.WriteJSON(w, http.StatusOK, book)
+}
+
+func (h *Handlers) update(w http.ResponseWriter, r *http.Request) {
+	caller, err := scope.FromContext(r.Context())
+	if err != nil {
+		httpserver.WriteError(w, h.logger, http.StatusUnauthorized, "sign in first", err)
+		return
+	}
+
+	var in Edit
+	if err := httpserver.ReadJSON(w, r, &in); err != nil {
+		httpserver.WriteError(w, h.logger, http.StatusBadRequest, "unreadable request", err)
+		return
+	}
+
+	book, err := h.store.Update(r.Context(), caller, r.PathValue("id"), in)
+	switch {
+	case errors.Is(err, scope.ErrForbidden):
+		httpserver.WriteError(w, nil, http.StatusForbidden, "your role cannot change books", nil)
+		return
+	case errors.Is(err, ErrInvalid):
+		httpserver.WriteError(w, nil, http.StatusBadRequest, "no such place", nil)
+		return
+	case err != nil:
+		httpserver.WriteError(w, h.logger, http.StatusNotFound, "no such book", err)
+		return
+	}
+	httpserver.WriteJSON(w, http.StatusOK, book)
 }
