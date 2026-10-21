@@ -166,3 +166,71 @@ func TestChain_WhenEveryProviderFails_ReportsWhy(t *testing.T) {
 			"nobody has catalogued", err)
 	}
 }
+
+// counter is a provider that remembers how often it was asked, which is the
+// half of the cover fallback worth pinning: it must not turn one lookup into
+// four.
+type counter struct {
+	name   string
+	record metadata.Record
+	err    error
+	calls  int
+}
+
+func (c *counter) Name() string { return c.name }
+
+func (c *counter) ByISBN(context.Context, string) (metadata.Record, error) {
+	c.calls++
+	return c.record, c.err
+}
+
+func TestChain_CompletesAMissingCoverFromTheRest(t *testing.T) {
+	unknown := &counter{name: "unknown", err: metadata.ErrNotFound}
+	// The BnF case: it has the book and no picture of it.
+	words := &counter{name: "words", record: metadata.Record{Title: "Le Hérisson"}}
+	picture := &counter{name: "picture", record: metadata.Record{
+		Title: "Another edition", CoverURL: "https://covers.openlibrary.org/b/id/1-L.jpg",
+	}}
+
+	got, err := metadata.Chain{unknown, words, picture}.ByISBN(t.Context(), "9782021563313")
+	if err != nil {
+		t.Fatalf("ByISBN: %v", err)
+	}
+	if got.Title != "Le Hérisson" {
+		t.Errorf("Title = %q: the cover must not drag the other record's data in", got.Title)
+	}
+	if got.CoverURL != "https://covers.openlibrary.org/b/id/1-L.jpg" {
+		t.Errorf("CoverURL = %q, want the one the next provider had", got.CoverURL)
+	}
+	if unknown.calls != 1 {
+		t.Errorf("the provider that did not know the book was asked %d times, want 1",
+			unknown.calls)
+	}
+}
+
+func TestChain_WhenTheRecordHasACover_AsksNobodyElse(t *testing.T) {
+	complete := &counter{name: "complete", record: metadata.Record{
+		Title: "The Hobbit", CoverURL: "https://covers.openlibrary.org/b/id/2-L.jpg",
+	}}
+	next := &counter{name: "next", record: metadata.Record{Title: "Never reached"}}
+
+	if _, err := (metadata.Chain{complete, next}).ByISBN(t.Context(), "9780140328721"); err != nil {
+		t.Fatalf("ByISBN: %v", err)
+	}
+	if next.calls != 0 {
+		t.Errorf("a complete record still cost %d extra request(s)", next.calls)
+	}
+}
+
+func TestChain_WhenNobodyHasACover_ReturnsTheRecordAnyway(t *testing.T) {
+	words := &counter{name: "words", record: metadata.Record{Title: "Le Hérisson"}}
+	alsoNone := &counter{name: "also-none", err: metadata.ErrNotFound}
+
+	got, err := metadata.Chain{words, alsoNone}.ByISBN(t.Context(), "9782021563313")
+	if err != nil {
+		t.Fatalf("a book without a cover must still be a book: %v", err)
+	}
+	if got.Title != "Le Hérisson" || got.CoverURL != "" {
+		t.Errorf("got %+v, want the record with no cover", got)
+	}
+}

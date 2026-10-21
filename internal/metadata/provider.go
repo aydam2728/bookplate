@@ -162,12 +162,21 @@ func clean(s string) string {
 type Chain []Provider
 
 // ByISBN returns the first record any provider has, or ErrNotFound.
+//
+// A record that arrives without a cover is completed from the rest of the
+// chain, because the catalogue that knows a book is often not the one that
+// has a picture of it. The BnF catalogues every book published in France and
+// publishes no cover at all, so without this a French novel arrives as a
+// line of text.
 func (c Chain) ByISBN(ctx context.Context, isbn13 string) (Record, error) {
 	var failures []error
-	for _, p := range c {
+	for i, p := range c {
 		record, err := p.ByISBN(ctx, isbn13)
 		switch {
 		case err == nil:
+			if record.CoverURL == "" {
+				record.CoverURL = c.coverAfter(ctx, isbn13, i)
+			}
 			return record, nil
 		case errors.Is(err, ErrNotFound):
 			continue
@@ -180,4 +189,22 @@ func (c Chain) ByISBN(ctx context.Context, isbn13 string) (Record, error) {
 		return Record{}, errors.Join(failures...)
 	}
 	return Record{}, ErrNotFound
+}
+
+// coverAfter asks the providers past the one that answered for a picture and
+// nothing else. The ones before it have already said they do not have the
+// book, so asking them again would buy nothing and cost a request each.
+//
+// This runs only when the winning record has no cover, so a lookup that
+// comes back complete still costs exactly one request. A provider that fails
+// here is ignored: the book is already in hand, and a missing picture is not
+// a reason to refuse it.
+func (c Chain) coverAfter(ctx context.Context, isbn13 string, answered int) string {
+	for _, p := range c[answered+1:] {
+		record, err := p.ByISBN(ctx, isbn13)
+		if err == nil && record.CoverURL != "" {
+			return record.CoverURL
+		}
+	}
+	return ""
 }
