@@ -71,3 +71,21 @@ select {
   background: var(--card); border: 1px solid var(--line); border-radius: 8px;
   width: 100%; margin-top: 4px;
 }
+.detail-head { display: flex; gap: 18px; align-items: flex-start; margin: 14px 0 6px; }
+.detail-head h2 { margin: 0 0 4px; }
+.detail-cover {
+  width: 130px; flex: none; border-radius: 6px;
+  background: var(--line); object-fit: cover;
+}
+.detail-cover:not([src]), .detail-cover[src=""] { display: none; }
+textarea {
+  display: block; width: 100%; margin-top: 4px; padding: 9px 11px;
+  font: inherit; color: var(--ink); background: var(--card);
+  border: 1px solid var(--line); border-radius: 8px; resize: vertical;
+}
+textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+h3 { font-size: 15px; margin: 22px 0 6px; }
+li.book { cursor: pointer; }
+li.book:hover { border-color: var(--accent); }
+#back { margin-bottom: 4px; }
+li.book:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

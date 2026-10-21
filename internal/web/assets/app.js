@@ -8,7 +8,7 @@ const el = (id) => document.getElementById(id);
 const status = el("status");
 
 function show(section) {
-  for (const name of ["setup", "login", "shelf"]) {
+  for (const name of ["setup", "login", "shelf", "detail"]) {
     el(name).hidden = name !== section;
   }
 }
@@ -55,6 +55,14 @@ function render(books) {
 
   for (const book of books) {
     const item = document.createElement("li");
+    // The whole line opens the book's own page, so it carries both
+    // identifiers: the copy for what sits on a shelf, the work for what
+    // people think of it.
+    item.className = "book";
+    item.dataset.copyId = book.copyId;
+    item.dataset.workId = book.workId;
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
     if (book.coverId) {
       const cover = document.createElement("img");
       cover.className = "cover";
@@ -215,7 +223,8 @@ function renderPlaces(tree) {
 
   // Both pickers show the same tree, indented with figure spaces so the
   // shape survives inside a select, where markup does not.
-  for (const [id, top] of [["place-parent", "At the top"], ["book-place", "Not filed yet"]]) {
+  for (const [id, top] of [["place-parent", "At the top"],
+    ["book-place", "Not filed yet"], ["detail-place", "Not filed yet"]]) {
     const select = el(id);
     const chosen = select.value;
     select.replaceChildren();
@@ -247,4 +256,137 @@ submits("place-form", async (values, form) => {
   form.querySelector("input[name=name]").focus();
   await refreshPlaces();
   say("");
+});
+
+// A book's own page: what it is, where this copy sits, and what the reader
+// thinks of it. Opened from the shelf, closed back to it.
+let current = null;
+
+// Ratings are stored in half stars, 1 to 10, because half stars are what
+// people actually give. They are written the way people read them.
+function stars(half) {
+  if (!half) {
+    return "Not rated";
+  }
+  const whole = Math.floor(half / 2);
+  return `${whole || ""}${half % 2 ? "½" : ""} out of 5`;
+}
+
+function fillRatings() {
+  const select = el("detail-rating");
+  for (let half = 0; half <= 10; half++) {
+    const option = document.createElement("option");
+    option.value = String(half);
+    option.textContent = stars(half);
+    select.append(option);
+  }
+}
+fillRatings();
+
+// The household figure names nobody: it is an average and a head count, so
+// one member's rating is never attributed to them.
+function household(figures) {
+  if (!figures.count) {
+    return "Nobody here has rated it yet.";
+  }
+  const people = figures.count === 1 ? "1 person" : `${figures.count} people`;
+  return `Household: ${(figures.average / 2).toFixed(1)} out of 5, from ${people}.`;
+}
+
+async function openDetail(copyId, workId) {
+  const [book, opinion] = await Promise.all([
+    call("GET", `/api/books/${encodeURIComponent(copyId)}`),
+    call("GET", `/api/works/${encodeURIComponent(workId)}/rating`),
+  ]);
+  current = { copyId: book.copyId, workId: book.workId };
+
+  const cover = el("detail-cover");
+  cover.hidden = !book.coverId;
+  if (book.coverId) {
+    cover.src = `/api/covers/${encodeURIComponent(book.coverId)}`;
+  } else {
+    // An empty src would fetch the page itself, so the attribute goes.
+    cover.removeAttribute("src");
+  }
+
+  el("detail-title").textContent = book.title;
+  el("detail-meta").textContent = [book.authors, book.publisher, book.published,
+    book.isbn13].filter(Boolean).join(" · ");
+  el("detail-household").textContent = household(opinion.household);
+
+  el("detail-place").value = book.placeId || "";
+  el("detail-summary").value = book.summary || "";
+  el("detail-notes").value = book.notes || "";
+
+  el("detail-rating").value = String(opinion.mine.rating || 0);
+  el("detail-status").value = opinion.mine.status || "";
+  el("detail-visibility").value = opinion.mine.visibility || "private";
+  el("detail-review").value = opinion.mine.review || "";
+
+  show("detail");
+  say("");
+  el("back").focus();
+}
+
+// One listener on the list rather than one per line: the list is replaced on
+// every refresh, and a per-line handler would be rebound each time.
+function openFrom(item) {
+  openDetail(item.dataset.copyId, item.dataset.workId).catch((error) => {
+    say(error.message, "error");
+  });
+}
+
+el("books").addEventListener("click", (event) => {
+  const item = event.target.closest("li.book");
+  if (item) {
+    openFrom(item);
+  }
+});
+
+el("books").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  const item = event.target.closest("li.book");
+  if (!item) {
+    return;
+  }
+  // Space would scroll the page instead of opening the book.
+  event.preventDefault();
+  openFrom(item);
+});
+
+el("back").addEventListener("click", () => {
+  current = null;
+  show("shelf");
+  say("");
+});
+
+submits("detail-form", async (values) => {
+  if (!current) {
+    return;
+  }
+  const book = await call("PATCH", `/api/books/${encodeURIComponent(current.copyId)}`, {
+    summary: values.summary,
+    notes: values.notes,
+    placeId: values.placeId,
+  });
+  el("detail-place").value = book.placeId || "";
+  say("Saved.");
+  // The shelf and the place counters behind this page are now stale.
+  await refresh();
+});
+
+submits("rating-form", async (values) => {
+  if (!current) {
+    return;
+  }
+  const opinion = await call("PUT", `/api/works/${encodeURIComponent(current.workId)}/rating`, {
+    rating: Number(values.rating),
+    review: values.review,
+    status: values.status,
+    visibility: values.visibility,
+  });
+  el("detail-household").textContent = household(opinion.household);
+  say("Saved.");
 });

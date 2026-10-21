@@ -81,6 +81,65 @@
     <ul id="books"></ul>
     <p id="empty" class="muted" hidden>Nothing on the shelf yet.</p>
   </section>
+
+  <section id="detail" hidden>
+    <button id="back" type="button" class="link">&larr; Back to the shelf</button>
+
+    <div class="detail-head">
+      <img id="detail-cover" class="detail-cover" alt="">
+      <div>
+        <h2 id="detail-title"></h2>
+        <p id="detail-meta" class="muted"></p>
+        <p id="detail-household" class="muted"></p>
+      </div>
+    </div>
+
+    <form id="detail-form">
+      <h3>This copy</h3>
+      <label>Where it is
+        <select name="placeId" id="detail-place">
+          <option value="">Not filed yet</option>
+        </select>
+      </label>
+      <label>Description
+        <textarea name="summary" id="detail-summary" rows="4"
+          placeholder="No catalogue had one. Write your own."></textarea>
+      </label>
+      <label>Your notes on this copy
+        <input name="notes" id="detail-notes" placeholder="Signed, bought in Lyon…">
+      </label>
+      <button type="submit">Save the copy</button>
+    </form>
+
+    <form id="rating-form">
+      <h3>What you think</h3>
+      <div class="grid">
+        <label>Rating
+          <select name="rating" id="detail-rating"></select>
+        </label>
+        <label>Where you are
+          <select name="status" id="detail-status">
+            <option value="">Not said</option>
+            <option value="to_read">To read</option>
+            <option value="reading">Reading</option>
+            <option value="read">Read</option>
+            <option value="abandoned">Abandoned</option>
+          </select>
+        </label>
+        <label>Who can see your review
+          <select name="visibility" id="detail-visibility">
+            <option value="private">Only me</option>
+            <option value="household">The household</option>
+          </select>
+        </label>
+      </div>
+      <label>Your review
+        <textarea name="review" id="detail-review" rows="3"
+          placeholder="Kept me up too late."></textarea>
+      </label>
+      <button type="submit">Save what you think</button>
+    </form>
+  </section>
 </main>
 <script src="/app.js"></script>
 </body>
