@@ -50,8 +50,15 @@ function fields(form) {
 function render(books) {
   const list = el("books");
   list.replaceChildren();
-  el("empty").hidden = books.length > 0;
-  el("count").textContent = books.length ? `· ${books.length}` : "";
+
+  // "Nothing on the shelf yet" and "nothing matches" are different news, and
+  // a person who has just typed a search needs the second one.
+  const narrowed = filtering();
+  const empty = el("empty");
+  empty.hidden = books.length > 0;
+  empty.textContent = narrowed ? "No book matches." : "Nothing on the shelf yet.";
+  el("count").textContent = books.length
+    ? `· ${books.length}${narrowed ? " found" : ""}` : "";
 
   for (const book of books) {
     const item = document.createElement("li");
@@ -92,8 +99,28 @@ function render(books) {
   }
 }
 
+// The shelf is whatever the two controls say it is, so every refresh reads
+// them: adding a book while a search is on shows the search, not everything.
+function filtering() {
+  return el("q").value.trim() !== "" || el("filter-place").value !== "";
+}
+
 async function refresh() {
-  const [books] = await Promise.all([call("GET", "/api/books"), refreshPlaces()]);
+  const params = new URLSearchParams();
+  const text = el("q").value.trim();
+  if (text) {
+    params.set("q", text);
+  }
+  const place = el("filter-place").value;
+  if (place) {
+    params.set("placeId", place);
+  }
+  const query = params.toString();
+
+  const [books] = await Promise.all([
+    call("GET", query ? `/api/books?${query}` : "/api/books"),
+    refreshPlaces(),
+  ]);
   render(books);
 }
 
@@ -207,6 +234,11 @@ function renderPlaces(tree) {
   for (const place of tree) {
     const item = document.createElement("li");
     item.className = "place";
+    // Clicking a place is how a person asks "what is in the living room",
+    // which is the same question as a filtered shelf.
+    item.dataset.placeId = place.id;
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
     item.style.paddingLeft = `${14 + place.depth * 20}px`;
 
     const name = document.createElement("span");
@@ -221,17 +253,24 @@ function renderPlaces(tree) {
     list.append(item);
   }
 
-  // Both pickers show the same tree, indented with figure spaces so the
-  // shape survives inside a select, where markup does not.
-  for (const [id, top] of [["place-parent", "At the top"],
-    ["book-place", "Not filed yet"], ["detail-place", "Not filed yet"]]) {
+  // Every picker shows the same tree, indented with figure spaces so the
+  // shape survives inside a select, where markup does not. What differs is
+  // what the empty choice means, and the filter also offers "not filed".
+  for (const [id, specials] of [
+    ["place-parent", [["", "At the top"]]],
+    ["book-place", [["", "Not filed yet"]]],
+    ["detail-place", [["", "Not filed yet"]]],
+    ["filter-place", [["", "Everywhere"], ["none", "Not filed yet"]]],
+  ]) {
     const select = el(id);
     const chosen = select.value;
     select.replaceChildren();
-    const none = document.createElement("option");
-    none.value = "";
-    none.textContent = top;
-    select.append(none);
+    for (const [value, label] of specials) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      select.append(option);
+    }
     for (const place of tree) {
       const option = document.createElement("option");
       option.value = place.id;
@@ -389,4 +428,55 @@ submits("rating-form", async (values) => {
   });
   el("detail-household").textContent = household(opinion.household);
   say("Saved.");
+});
+
+// Searching is typed, not submitted: the list follows the box 200ms after the
+// last keystroke, so a six-letter title costs one request and not six.
+let pending = 0;
+
+// Every refresh below is fire and forget, and a failure belongs in the status
+// line rather than in a console nobody has open.
+function reloading() {
+  refresh().catch((error) => say(error.message, "error"));
+}
+
+el("q").addEventListener("input", () => {
+  clearTimeout(pending);
+  pending = setTimeout(reloading, 200);
+});
+
+el("filter-place").addEventListener("change", reloading);
+
+el("clear-search").addEventListener("click", () => {
+  el("q").value = "";
+  el("filter-place").value = "";
+  el("q").focus();
+  reloading();
+});
+
+// Clicking a place filters the shelf to it and everything under it: a room
+// includes its bookcases, because that is where the books actually are.
+function filterTo(placeId) {
+  el("filter-place").value = placeId;
+  reloading();
+}
+
+el("places").addEventListener("click", (event) => {
+  const item = event.target.closest("li.place");
+  if (item) {
+    filterTo(item.dataset.placeId);
+  }
+});
+
+el("places").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  const item = event.target.closest("li.place");
+  if (!item) {
+    return;
+  }
+  // Space would scroll the page instead of filtering.
+  event.preventDefault();
+  filterTo(item.dataset.placeId);
 });

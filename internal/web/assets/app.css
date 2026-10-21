@@ -89,3 +89,7 @@ li.book { cursor: pointer; }
 li.book:hover { border-color: var(--accent); }
 #back { margin-bottom: 4px; }
 li.book:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+li.place { cursor: pointer; }
+li.place:hover span:first-child { text-decoration: underline; }
+li.place:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type=search] { min-width: 0; }

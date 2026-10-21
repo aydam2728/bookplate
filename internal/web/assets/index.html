@@ -78,6 +78,17 @@
       <button type="submit">Add the book</button>
     </form>
 
+    <div class="with-button">
+      <input id="q" type="search" maxlength="200" autocomplete="off"
+        aria-label="Search the shelf"
+        placeholder="A title, an author, a barcode, a word you remember">
+      <select id="filter-place" aria-label="Where to look">
+        <option value="">Everywhere</option>
+        <option value="none">Not filed yet</option>
+      </select>
+      <button id="clear-search" type="button">Clear</button>
+    </div>
+
     <ul id="books"></ul>
     <p id="empty" class="muted" hidden>Nothing on the shelf yet.</p>
   </section>
