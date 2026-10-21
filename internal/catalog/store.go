@@ -248,20 +248,63 @@ const selectBooks = `
 	         ON i.edition_id = e.id AND i.library_id = c.library_id AND i.scheme = 'isbn13'
 	 WHERE c.library_id = ? AND c.deleted_at IS NULL`
 
-// List returns the copies in the caller's library, most recently added first.
-func (s *Store) List(ctx context.Context, caller scope.Caller) ([]Book, error) {
+// Query narrows a listing. A zero Query lists the whole library.
+type Query struct {
+	// Text is matched against what a person might remember: title, authors,
+	// publisher, place, summary, notes, and the ISBN.
+	Text string
+	// PlaceID restricts the listing to that place and everything under it,
+	// because "what is in the living room" includes its bookcases.
+	PlaceID string
+	// Unfiled asks for the copies that sit nowhere.
+	Unfiled bool
+}
+
+// MaxQueryText is the longest search accepted. It is longer than any title
+// and short enough that a pathological query is not interesting.
+const MaxQueryText = 200
+
+// List returns the copies in the caller's library that answer q, most
+// recently added first.
+//
+// The place filter runs in SQL, on the indexed path prefix. The text is
+// matched in Go: folding accents is not something SQLite does without ICU,
+// and a household catalogue is thousands of rows, not millions. If that ever
+// stops being true, the fix is an indexed folded column, not SQL like.
+func (s *Store) List(ctx context.Context, caller scope.Caller, q Query) ([]Book, error) {
 	if !caller.Valid() {
 		return nil, fmt.Errorf("%w: incomplete caller", scope.ErrForbidden)
 	}
+	if len(q.Text) > MaxQueryText {
+		return nil, fmt.Errorf("%w: a search runs to %d characters", ErrInvalid, MaxQueryText)
+	}
+	if q.Unfiled && q.PlaceID != "" {
+		return nil, fmt.Errorf(`%w: a place and "not filed" cannot both be asked for`, ErrInvalid)
+	}
+
+	query, args := selectBooks, []any{caller.LibraryID}
+	switch {
+	case q.Unfiled:
+		query += ` AND c.place_id IS NULL`
+	case q.PlaceID != "":
+		// The subtree, as one prefix comparison on the materialised path.
+		// A path is a prefix of itself, so the place asked for is included.
+		query += ` AND c.place_id IN (
+			SELECT p.id FROM place p
+			  JOIN place root ON root.library_id = p.library_id AND root.id = ?
+			 WHERE p.library_id = c.library_id AND p.deleted_at IS NULL
+			   AND p.path LIKE root.path || '%')`
+		args = append(args, q.PlaceID)
+	}
 
 	rows, err := s.db.QueryContext(ctx,
-		selectBooks+` GROUP BY c.id ORDER BY c.created_at DESC, c.id DESC`,
-		caller.LibraryID)
+		query+` GROUP BY c.id ORDER BY c.created_at DESC, c.id DESC`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing books: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	wanted := words(q.Text)
 	books := []Book{}
 	for rows.Next() {
 		var b Book
@@ -270,7 +313,9 @@ func (s *Store) List(ctx context.Context, caller scope.Caller) ([]Book, error) {
 			&b.PlaceID, &b.PlaceName, &b.Summary, &b.Notes); err != nil {
 			return nil, fmt.Errorf("listing books: %w", err)
 		}
-		books = append(books, b)
+		if matches(b, wanted) {
+			books = append(books, b)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("listing books: %w", err)

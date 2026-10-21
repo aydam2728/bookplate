@@ -41,6 +41,11 @@ func (h *Handlers) Register(mux *http.ServeMux, protect func(http.HandlerFunc) h
 	mux.HandleFunc("PATCH /api/books/{id}", protect(h.update))
 }
 
+// unfiledFilter is the value of placeId that asks for the copies sitting
+// nowhere. An identifier is 26 characters of Crockford base32, so a real
+// place can never collide with it.
+const unfiledFilter = "none"
+
 func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	caller, err := scope.FromContext(r.Context())
 	if err != nil {
@@ -48,7 +53,20 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	books, err := h.store.List(r.Context(), caller)
+	// An unfiled listing and a place listing are different questions, so
+	// "unfiled" is a value of the place filter rather than a flag beside it:
+	// one control in the interface, one parameter here.
+	place := r.URL.Query().Get("placeId")
+	q := Query{Text: r.URL.Query().Get("q"), Unfiled: place == unfiledFilter}
+	if !q.Unfiled {
+		q.PlaceID = place
+	}
+
+	books, err := h.store.List(r.Context(), caller, q)
+	if errors.Is(err, ErrInvalid) {
+		httpserver.WriteError(w, nil, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
 	if err != nil {
 		httpserver.WriteError(w, h.logger, http.StatusInternalServerError, "could not read the shelf", err)
 		return

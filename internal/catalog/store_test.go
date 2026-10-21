@@ -67,7 +67,7 @@ func TestAdd_ThenList_ShowsTheBook(t *testing.T) {
 		t.Errorf("ISBN13 = %q, want the normalised form", added.ISBN13)
 	}
 
-	books, err := s.List(t.Context(), owner)
+	books, err := s.List(t.Context(), owner, catalog.Query{})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestList_DoesNotLeakAnotherHousehold(t *testing.T) {
 		t.Fatalf("Add: %v", err)
 	}
 
-	books, err := s.List(t.Context(), beta)
+	books, err := s.List(t.Context(), beta, catalog.Query{})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestList_DoesNotLeakAnotherHousehold(t *testing.T) {
 		t.Fatalf("a member of another household saw %d books: %+v", len(books), books)
 	}
 
-	own, err := s.List(t.Context(), alpha)
+	own, err := s.List(t.Context(), alpha, catalog.Query{})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestList_DoesNotLeakAnotherHousehold(t *testing.T) {
 func TestList_WhenTheCallerIsAnonymous_Refuses(t *testing.T) {
 	s, _ := newStore(t)
 
-	if _, err := s.List(t.Context(), scope.Caller{}); !errors.Is(err, scope.ErrForbidden) {
+	if _, err := s.List(t.Context(), scope.Caller{}, catalog.Query{}); !errors.Is(err, scope.ErrForbidden) {
 		t.Errorf("an anonymous caller listed a catalogue, err = %v", err)
 	}
 }
