@@ -257,6 +257,50 @@ code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/lookup?isbn
 [ "$code" = "400" ] || fail "a mistyped ISBN returned $code, expected 400"
 pass "a mistyped ISBN is refused without a round trip"
 
+# A cover the household supplies itself. The bytes come from the browser, so
+# this is the one cover path that makes no outbound request at all, and the
+# only way to give a picture to a book no catalogue has one for.
+edition=$(curl -fsS -b "$jar" "$base/api/books/$copy" \
+  | sed -n 's/.*"editionId":"\([^"]*\)".*/\1/p')
+[ -n "$edition" ] || fail "the detail view returned no edition identifier"
+
+png=$(mktemp)
+printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAG0lEQVR4nAAOAPH/AsigWigeFAAoHhTIoFoDAB62BDv8TihXAAAAAElFTkSuQmCC' \
+  | base64 -d > "$png"
+asset=$(curl -fsS -b "$jar" -X PUT -H 'Content-Type: image/png' --data-binary "@$png" \
+  "$base/api/covers/editions/$edition" | sed -n 's/.*"coverId":"\([^"]*\)".*/\1/p')
+[ -n "$asset" ] || fail "uploading a cover returned no identifier"
+
+# A PNG went up and a JPEG comes back: nothing is stored as it arrived.
+served=$(curl -fsS -b "$jar" -o /dev/null -w '%{content_type}' "$base/api/covers/$asset")
+[ "$served" = "image/jpeg" ] || fail "the stored cover is $served, expected image/jpeg"
+curl -fsS -b "$jar" "$base/api/books/$copy" | grep -q "\"coverId\":\"$asset\"" \
+  || fail "the book does not point at the cover just uploaded"
+pass "a cover is uploaded, re-encoded and attached"
+
+junk=$(mktemp)
+printf 'this is not an image at all' > "$junk"
+code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' -X PUT \
+  -H 'Content-Type: image/png' --data-binary "@$junk" \
+  "$base/api/covers/editions/$edition")
+[ "$code" = "400" ] || fail "a text file as a cover returned $code, expected 400"
+pass "a file that is not an image is refused"
+
+# Nine megabytes of anything is stopped by the cap, so no decoder ever sees
+# it. An image bomb has to get past this before it gets past the pixel limit.
+big=$(mktemp)
+head -c 9000000 /dev/zero > "$big"
+code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' -X PUT \
+  -H 'Content-Type: image/png' --data-binary "@$big" \
+  "$base/api/covers/editions/$edition")
+[ "$code" = "413" ] || fail "a 9 MB upload returned $code, expected 413"
+pass "an oversized upload is refused"
+
+code=$(curl -s -o "$(mktemp)" -w '%{http_code}' -X PUT -H 'Content-Type: image/png' \
+  --data-binary "@$png" "$base/api/covers/editions/$edition")
+[ "$code" = "401" ] || fail "an anonymous cover upload returned $code, expected 401"
+pass "a cover upload refuses an anonymous request"
+
 # Covers need the network, so only the refusals are asserted here.
 code=$(curl -s -b "$jar" -o "$(mktemp)" -w '%{http_code}' "$base/api/covers/does-not-exist")
 [ "$code" = "404" ] || fail "an unknown cover returned $code, expected 404"
