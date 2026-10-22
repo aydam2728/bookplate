@@ -370,7 +370,9 @@ async function openDetail(copyId, workId) {
     call("GET", `/api/books/${encodeURIComponent(copyId)}`),
     call("GET", `/api/works/${encodeURIComponent(workId)}/rating`),
   ]);
-  current = { copyId: book.copyId, workId: book.workId };
+  // The edition is here because a cover belongs to one printing, not to the
+  // work: two editions of the same novel have different pictures.
+  current = { copyId: book.copyId, workId: book.workId, editionId: book.editionId };
 
   const cover = el("detail-cover");
   cover.hidden = !book.coverId;
@@ -539,4 +541,49 @@ el("unselect").addEventListener("click", () => {
     box.checked = false;
   }
   showSelection();
+});
+
+// A cover the household supplies itself, for the books no catalogue has a
+// picture of. The file goes up as its own bytes rather than wrapped in a
+// form: there is nothing else in the request, and multipart would be a
+// parser on the server for no gain.
+async function put(path, file) {
+  const response = await fetch(path, {
+    method: "PUT",
+    headers: { Accept: "application/json", "Content-Type": file.type },
+    body: file,
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error((payload && payload.error) || "something went wrong");
+  }
+  return payload;
+}
+
+el("cover-upload").addEventListener("click", async () => {
+  const file = el("cover-file").files[0];
+  if (!current || !file) {
+    say("Choose a picture first.");
+    return;
+  }
+
+  const button = el("cover-upload");
+  button.disabled = true;
+  say("Storing the picture…");
+  try {
+    const stored = await put(
+      `/api/covers/editions/${encodeURIComponent(current.editionId)}`, file);
+    const cover = el("detail-cover");
+    cover.hidden = false;
+    cover.src = `/api/covers/${encodeURIComponent(stored.coverId)}`;
+    el("cover-file").value = "";
+    say("Cover stored.");
+    // The shelf behind this page is showing the book without a picture.
+    await refresh();
+  } catch (error) {
+    say(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
 });

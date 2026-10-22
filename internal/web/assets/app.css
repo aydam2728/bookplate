@@ -102,3 +102,4 @@ button.open:hover { text-decoration: underline; }
 #selection .muted { white-space: nowrap; }
 #move { background: var(--accent); color: var(--bg); border-color: transparent; }
 #selection button.link { background: none; border: 0; color: var(--muted); }
+#cover-file { font-size: 13px; padding: 7px 9px; }
